@@ -1,0 +1,11 @@
+# A throwaway Debian or Ubuntu machine with systemd as PID 1, used to test
+# deploy/install.sh and the hardened unit for real. See systemd-test.sh.
+ARG BASE=debian:12
+FROM ${BASE}
+ENV container=docker DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus iproute2 openssh-client procps util-linux ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && systemctl mask getty.target console-getty.service systemd-logind.service
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

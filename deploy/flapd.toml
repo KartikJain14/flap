@@ -1,0 +1,144 @@
+# flapd configuration.
+#
+# Every key below shows its built-in default. Keys you delete fall back to the
+# same default, so removing a line never disables a security control. Unknown
+# keys are rejected at startup. Validate edits with:
+#
+#   flapd check-config -config /etc/flapd/flapd.toml
+#
+# Durations use Go syntax: "500ms", "30s", "10m", "2h".
+
+[server]
+# Address and port to listen on. Keep your administrative sshd on port 22;
+# flapd should use its own port. Use "[::]:2222" to listen on IPv6 as well.
+listen = "0.0.0.0:2222"
+# Persistent SSH host keys. Players' clients pin these on first connect, so
+# keep them across upgrades and include them in backups.
+host_key_files = ["/var/lib/flapd/ssh_host_ed25519_key"]
+# Create an Ed25519 host key on first start if a file is missing. Existing
+# keys are never replaced.
+generate_host_key = true
+# 32-byte secret used to derive player IDs from public keys (HMAC-SHA256), so
+# the database alone cannot be matched against published SSH keys. Created on
+# first start. Losing it detaches every key-based player from their scores.
+identity_secret_file = "/var/lib/flapd/identity_secret"
+# Optional name shown on the welcome screen (printable ASCII, max 40 chars).
+name = ""
+# When true, new sessions see maintenance_message and are disconnected.
+maintenance = false
+maintenance_message = "Flap is down for maintenance. Please try again later."
+# On SIGTERM: stop accepting, tell players, save runs in progress and wait up
+# to this long for sessions to finish.
+shutdown_grace = "10s"
+
+[auth]
+# "open":      any SSH public key is a persistent identity; clients without a
+#              key may play as guests (keyboard-interactive, no password).
+# "publickey": any SSH public key is accepted; keyless clients are refused.
+# "allowlist": only keys in authorized_keys_file may connect.
+# Password authentication is never offered. No mode provides a shell.
+mode = "open"
+# OpenSSH authorized_keys format. Required for "allowlist"; reloaded on SIGHUP.
+authorized_keys_file = ""
+# Whether guest runs appear on the global leaderboard.
+guest_leaderboard = true
+
+[limits]
+max_connections = 64            # all TCP connections, including handshakes
+max_unauthenticated = 16        # concurrent handshakes/authentications
+max_sessions = 20               # concurrent games
+max_connections_per_ip = 3      # IPv6 is grouped by /64
+max_sessions_per_player = 2     # per public key
+connection_rate_per_ip = 12.0   # new connections per minute per IP
+connection_burst_per_ip = 6
+connection_rate_global = 20.0   # new connections per second, all IPs
+connection_burst_global = 40
+auth_failures_before_ban = 10   # failed key/auth attempts before a temporary ban
+auth_failure_window = "10m"
+ban_duration = "15m"
+tracked_addresses = 10000       # memory bound for per-IP state (fails closed)
+handshake_timeout = "10s"       # TCP accept to authenticated
+session_start_timeout = "10s"   # authenticated to "shell" request
+idle_timeout = "10m"            # no keyboard input
+max_session_duration = "2h"     # "0s" disables the cap
+write_timeout = "20s"           # a client that stops reading is disconnected
+keepalive_interval = "30s"
+keepalive_max_missed = 3
+input_bytes_per_second = 2048   # sustained keyboard input per session
+input_burst_bytes = 8192
+max_terminal_width = 400        # larger PTY sizes are clamped
+max_terminal_height = 200
+
+[ui]
+render_fps = 30                 # frames per second during play
+menu_fps = 12                   # frames per second on menus
+min_width = 50                  # smaller terminals get a resize notice
+min_height = 18
+# Initial colour and glyph modes. "auto" guesses from TERM/COLORTERM; players
+# can switch in-game with C (colours) and U (Unicode/ASCII).
+default_color = "auto"          # auto | truecolor | 256 | 16
+default_glyphs = "auto"         # auto | unicode | ascii
+
+[game]
+# World units: the playfield height is 1.0.
+tick_rate = 60                  # fixed simulation steps per second
+gravity = 3.1
+flap_velocity = 0.92
+max_fall_speed = 1.45
+pipe_width = 0.16
+gap_margin = 0.08
+first_pipe_distance = 1.0
+
+# Difficulty curve. Defining any [[game.stages]] replaces all of them. The
+# server rejects stages whose gaps could become unreachable.
+[[game.stages]]
+min_score = 0
+speed = 0.5
+gap = 0.36
+spacing = 0.9
+gap_shift = 0.2
+
+[[game.stages]]
+min_score = 10
+speed = 0.54
+gap = 0.34
+spacing = 0.88
+gap_shift = 0.24
+
+[[game.stages]]
+min_score = 25
+speed = 0.58
+gap = 0.32
+spacing = 0.86
+gap_shift = 0.28
+
+[[game.stages]]
+min_score = 50
+speed = 0.62
+gap = 0.3
+spacing = 0.84
+gap_shift = 0.3
+
+[[game.stages]]
+min_score = 100
+speed = 0.65
+gap = 0.29
+spacing = 0.82
+gap_shift = 0.32
+
+[storage]
+path = "/var/lib/flapd/flap.db"
+operation_timeout = "3s"
+leaderboard_size = 100          # entries shown on the leaderboard
+run_retention_days = 365        # run history age limit; 0 keeps forever
+max_runs_per_player = 500       # newest runs kept per player
+guest_retention_days = 30       # inactive guests below the leaderboard are removed
+integrity_check = "quick"       # on startup: quick | full | off
+maintenance_interval = "1h"     # retention pruning and WAL checkpoints
+
+[logging]
+level = "info"                  # debug | info | warn | error
+format = "json"                 # json | text (journald captures stderr)
+# How client IPs appear in logs: full | truncated (/24, /48) | hashed | none.
+ip_addresses = "truncated"
+stats_interval = "5m"           # periodic resource summary; "0s" disables

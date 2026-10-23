@@ -1,0 +1,6 @@
+bin/
+docs/screenshots/svg/
+*.db
+*.db-wal
+*.db-shm
+flap-local.db*
