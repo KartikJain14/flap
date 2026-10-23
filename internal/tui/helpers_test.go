@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -23,7 +24,7 @@ type fakeStore struct {
 	fail     int // number of upcoming calls that fail
 	failAll  bool
 	renames  int
-	prefs    [2]string
+	prefs    store.Prefs
 	nextID   int64
 	recorded map[string]bool
 }
@@ -158,10 +159,10 @@ func (f *fakeStore) Rename(_ context.Context, id int64, name string) error {
 	return nil
 }
 
-func (f *fakeStore) SetPrefs(_ context.Context, id int64, c, g string) error {
+func (f *fakeStore) SetPrefs(_ context.Context, id int64, p store.Prefs) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.prefs = [2]string{c, g}
+	f.prefs = p
 	return nil
 }
 
@@ -174,6 +175,7 @@ type harness struct {
 	now   time.Time
 	quit  bool
 	msgs  int
+	raw   []string // raw terminal output requested by the model (sound)
 	seed  uint64
 	param game.Params
 }
@@ -217,6 +219,8 @@ func (h *harness) run(cmd tea.Cmd) {
 	case nil:
 	case tea.QuitMsg:
 		h.quit = true
+	case tea.RawMsg:
+		h.raw = append(h.raw, fmt.Sprint(m.Msg))
 	case tea.BatchMsg:
 		for _, c := range m {
 			h.run(c)

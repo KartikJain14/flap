@@ -233,12 +233,12 @@ func TestRename(t *testing.T) {
 	if got.Name != "Skywalker" {
 		t.Fatalf("name = %q", got.Name)
 	}
-	if err := s.SetPrefs(ctx, a.ID, "256", "ascii"); err != nil {
+	if err := s.SetPrefs(ctx, a.ID, Prefs{ColorMode: "256", GlyphMode: "ascii", SoundMode: "off"}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.Player(ctx, a.ID)
-	if got.ColorMode != "256" || got.GlyphMode != "ascii" {
-		t.Fatalf("prefs = %q %q", got.ColorMode, got.GlyphMode)
+	if got.ColorMode != "256" || got.GlyphMode != "ascii" || got.SoundMode != "off" {
+		t.Fatalf("prefs = %q %q %q", got.ColorMode, got.GlyphMode, got.SoundMode)
 	}
 }
 
@@ -454,5 +454,45 @@ func TestRemovePlayer(t *testing.T) {
 	_, runs, _ := s.Stats(ctx)
 	if runs != 1 {
 		t.Fatalf("runs not cascaded: %d", runs)
+	}
+}
+
+// TestMigratesVersionOneDatabase upgrades a database created by the first
+// schema version and checks existing data survives.
+func TestMigratesVersionOneDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v1.db")
+	ctx := context.Background()
+	saved := migrations
+	migrations = saved[:1]
+	old, err := Open(ctx, path, Options{IntegrityCheck: "full"})
+	if err != nil {
+		migrations = saved
+		t.Fatal(err)
+	}
+	// Data written by a version-one binary.
+	_, err = old.DB().Exec(`INSERT INTO players (id, kind, identity, name, name_key, created_at, last_seen_at, best_score, best_at, total_runs)
+		VALUES (7, 'key', ?, 'Veteran', 'veteran', 1, 1, 33, 1, 1)`, ident(1))
+	if err != nil {
+		migrations = saved
+		t.Fatal(err)
+	}
+	old.Close()
+	migrations = saved
+	p := Player{ID: 7}
+
+	s, err := Open(ctx, path, Options{IntegrityCheck: "full", GuestLeaderboard: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if v, _ := s.SchemaVersion(ctx); v != len(migrations) {
+		t.Fatalf("schema version %d, want %d", v, len(migrations))
+	}
+	got, err := s.Player(ctx, p.ID)
+	if err != nil || got.Best != 33 || got.SoundMode != "" {
+		t.Fatalf("player after migration: %+v %v", got, err)
+	}
+	if err := s.SetPrefs(ctx, p.ID, Prefs{SoundMode: "on"}); err != nil {
+		t.Fatal(err)
 	}
 }

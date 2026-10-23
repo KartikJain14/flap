@@ -207,7 +207,11 @@ func (a *App) drawHUD() {
 	a.cv.Text(x+len(label), row, val, colAccent, canvas.Bold)
 	if a.world != nil {
 		th := themeFor(a.world.Stage())
-		a.cv.Text(l.playX+1, row, strings.ToUpper(th.name), colText.Scale(0.8), 0)
+		n := a.cv.Text(l.playX+1, row, strings.ToUpper(th.name), colText.Scale(0.8), 0)
+		if l.playW >= 60 {
+			speed := fmt.Sprintf("SPEED %d%%", a.speedPercent())
+			a.cv.Text(l.playX+n+3, row, speed, colText.Scale(0.7), 0)
+		}
 	}
 	if a.bannerT > 0 && a.screen == screenPlay {
 		fade := math.Min(1, math.Min((2.2-a.bannerT)/0.25, a.bannerT/0.5))
@@ -475,7 +479,7 @@ func (a *App) drawStatusBar() {
 		}
 		a.cv.Text(x, y, right, dark, 0)
 	}
-	left := "C colors: " + a.color.String() + "  U glyphs: " + a.glyphs.String()
+	left := "C colors: " + a.color.String() + "  U glyphs: " + a.glyphs.String() + "  S sound: " + a.sound.String()
 	if room := l.w - rw - 4; room >= 24 {
 		a.cv.Text(1, y, a.trunc(left, room), dark, 0)
 	}
@@ -733,6 +737,7 @@ func (a *App) drawHelp() {
 		{"N", "change your name (SSH key players)", false},
 		{"C", "colors: " + a.color.String() + " (truecolor, 256, 16)", false},
 		{"U", "graphics: " + a.glyphs.String() + " (unicode or ascii)", false},
+		{"S", "sound: " + a.sound.String() + " (terminal bell on speed-ups, new bests, crashes)", false},
 		{"H ?", "this help", false},
 		{"Q ESC", "quit (ESC goes back from menus)", false},
 		{"", "", false},

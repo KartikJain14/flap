@@ -86,6 +86,16 @@ var themes = []theme{
 		dirt: hex(0x5a4e44), dirtDark: hex(0x4a3f37),
 		pipeLight: 0.68,
 	},
+	{
+		name:   "Daybreak",
+		skyTop: hex(0x5b6fd0), skyMid: hex(0xf3a6c6), skyBottom: hex(0xffe0b6), midAt: 0.6,
+		sun: hex(0xfff0c0), sunGlow: hex(0xffb0a0), sunX: 0.16, sunY: 0.62, sunR: 0.085, glow: 0.5,
+		cloud: hex(0xffdce9), cloudShade: hex(0xf0b2cb),
+		hillFar: hex(0xab9bd8), hillNear: hex(0x5f9e7e), hillNS: hex(0x4c876a),
+		grassLight: hex(0x92d26c), grassDark: hex(0x70b952), grassEdge: hex(0x4a8a3a),
+		dirt: hex(0xd8b083), dirtDark: hex(0xbe946a),
+		pipeLight: 0.98,
+	},
 }
 
 // themeFor returns the theme of a difficulty stage. Extra configured stages

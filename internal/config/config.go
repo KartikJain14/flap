@@ -118,6 +118,7 @@ type UI struct {
 	MinHeight     int    `toml:"min_height"`
 	DefaultColor  string `toml:"default_color"`
 	DefaultGlyphs string `toml:"default_glyphs"`
+	DefaultSound  string `toml:"default_sound"`
 }
 
 // Game configures physics and difficulty.
@@ -129,6 +130,7 @@ type Game struct {
 	PipeWidth         float64      `toml:"pipe_width"`
 	GapMargin         float64      `toml:"gap_margin"`
 	FirstPipeDistance float64      `toml:"first_pipe_distance"`
+	SmoothDifficulty  bool         `toml:"smooth_difficulty"`
 	Stages            []game.Stage `toml:"stages"`
 }
 
@@ -202,6 +204,7 @@ func Default() Config {
 			MinHeight:     18,
 			DefaultColor:  "auto",
 			DefaultGlyphs: "auto",
+			DefaultSound:  "on",
 		},
 		Game: Game{
 			TickRate:          p.TickRate,
@@ -211,6 +214,7 @@ func Default() Config {
 			PipeWidth:         p.PipeWidth,
 			GapMargin:         p.GapMargin,
 			FirstPipeDistance: p.FirstPipe,
+			SmoothDifficulty:  p.Smooth,
 			Stages:            p.Stages,
 		},
 		Storage: Storage{
@@ -281,6 +285,7 @@ func (c Config) GameParams() game.Params {
 	p.PipeWidth = c.Game.PipeWidth
 	p.GapMargin = c.Game.GapMargin
 	p.FirstPipe = c.Game.FirstPipeDistance
+	p.Smooth = c.Game.SmoothDifficulty
 	p.Stages = append([]game.Stage(nil), c.Game.Stages...)
 	return p
 }
@@ -404,6 +409,7 @@ func (c Config) Validate() error {
 	v.intRange("ui.min_height", u.MinHeight, 14, l.MaxTerminalHeight)
 	v.oneOf("ui.default_color", u.DefaultColor, "auto", "truecolor", "256", "16")
 	v.oneOf("ui.default_glyphs", u.DefaultGlyphs, "auto", "unicode", "ascii")
+	v.oneOf("ui.default_sound", u.DefaultSound, "on", "off")
 
 	// Game.
 	if err := c.GameParams().Validate(); err != nil {

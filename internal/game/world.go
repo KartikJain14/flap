@@ -179,7 +179,7 @@ func (w *World) Flaps() int { return w.flaps }
 func (w *World) Duration() float64 { return float64(w.ticks) * w.dt }
 
 // Speed returns the current scroll speed.
-func (w *World) Speed() float64 { return w.params.Stages[w.stage].Speed }
+func (w *World) Speed() float64 { return w.params.StageAt(w.score).Speed }
 
 // ViewWidth returns the visible width in world units.
 func (w *World) ViewWidth() float64 { return w.view }
@@ -273,20 +273,12 @@ func (w *World) integrate() {
 // stageFor returns the stage index that applies at the given score. Pipe i is
 // reached when the score equals i, so the course can be generated from pipe
 // indices alone, independent of timing or view width.
-func (w *World) stageFor(score int) int {
-	s := 0
-	for i, st := range w.params.Stages {
-		if score >= st.MinScore {
-			s = i
-		}
-	}
-	return s
-}
+func (w *World) stageFor(score int) int { return w.params.StageIndex(score) }
 
 func (w *World) spawnPipes() {
 	limit := w.camera + w.view + 2*w.params.PipeWidth
 	for w.nextX < limit {
-		st := w.params.Stages[w.stageFor(w.nextIndex)]
+		st := w.params.StageAt(w.nextIndex)
 		lo := w.params.GapMargin + st.Gap/2
 		hi := 1 - w.params.GapMargin - st.Gap/2
 		r := w.rng.Float64()*2 - 1
@@ -300,7 +292,7 @@ func (w *World) spawnPipes() {
 		w.pipes = append(w.pipes, Pipe{Index: w.nextIndex, X: w.nextX, GapY: y, Gap: st.Gap})
 		w.lastGapY = y
 		w.nextIndex++
-		w.nextX += w.params.Stages[w.stageFor(w.nextIndex)].Spacing
+		w.nextX += w.params.StageAt(w.nextIndex).Spacing
 	}
 }
 

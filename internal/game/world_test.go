@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -196,7 +197,7 @@ func TestCourseIsFairAndBounded(t *testing.T) {
 			t.Fatalf("seed %d: only %d pipes materialised", seed, len(pipes))
 		}
 		for i, pp := range pipes {
-			st := p.Stages[w.stageFor(pp.Index)]
+			st := p.StageAt(pp.Index)
 			if pp.Gap != st.Gap {
 				t.Fatalf("seed %d pipe %d: gap %v, want %v", seed, i, pp.Gap, st.Gap)
 			}
@@ -303,7 +304,7 @@ func TestDifficultyProgression(t *testing.T) {
 	w := NewWorld(p, 11, 1.8)
 	var stages []Event
 	lastSpeed := w.Speed()
-	for tick := 0; tick < p.TickRate*400 && w.Phase() == Playing && w.Score() < 120; tick++ {
+	for tick := 0; tick < p.TickRate*600 && w.Phase() == Playing && w.Score() < 160; tick++ {
 		if botWants(w, 0) {
 			w.Flap()
 		}
@@ -318,7 +319,7 @@ func TestDifficultyProgression(t *testing.T) {
 		}
 		lastSpeed = w.Speed()
 	}
-	if w.Score() < 120 {
+	if w.Score() < 160 {
 		t.Fatalf("bot reached only %d; cannot check all stages", w.Score())
 	}
 	if len(stages) != len(p.Stages)-1 {
@@ -411,4 +412,53 @@ func hasEvent(evs []Event, k EventKind) bool {
 		}
 	}
 	return false
+}
+
+func TestSmoothRampRaisesDifficultyEveryPoint(t *testing.T) {
+	p := DefaultParams()
+	last := p.Stages[len(p.Stages)-1].MinScore
+	prev := p.StageAt(0)
+	for score := 1; score <= last+20; score++ {
+		s := p.StageAt(score)
+		if score <= last && s.Speed <= prev.Speed {
+			t.Fatalf("speed did not increase at score %d: %v -> %v", score, prev.Speed, s.Speed)
+		}
+		if s.Gap > prev.Gap || s.Spacing > prev.Spacing {
+			t.Fatalf("gap or spacing grew at score %d", score)
+		}
+		prev = s
+	}
+	if got := p.StageAt(last + 1000); got != p.Stages[len(p.Stages)-1] {
+		t.Fatalf("difficulty past the last stage = %+v, want the last stage", got)
+	}
+	// Stage boundaries land exactly on the configured anchors.
+	for _, st := range p.Stages {
+		if got := p.StageAt(st.MinScore); got != st {
+			t.Fatalf("StageAt(%d) = %+v, want %+v", st.MinScore, got, st)
+		}
+	}
+	// Without smoothing, difficulty steps.
+	p.Smooth = false
+	if p.StageAt(5) != p.Stages[0] {
+		t.Fatal("stepped mode interpolated")
+	}
+}
+
+func TestValidateChecksInterpolatedSteps(t *testing.T) {
+	p := DefaultParams()
+	// Each anchor is reachable on its own, but halfway between them the
+	// shift is large while the spacing is short and the speed high.
+	p.Stages = []Stage{
+		{MinScore: 0, Speed: 0.5, Gap: 0.36, Spacing: 0.9, GapShift: 0.0},
+		{MinScore: 10, Speed: 1.6, Gap: 0.34, Spacing: 0.46, GapShift: 0.0},
+		{MinScore: 20, Speed: 0.5, Gap: 0.34, Spacing: 0.9, GapShift: 0.5},
+	}
+	err := p.Validate()
+	if err == nil || !strings.Contains(err.Error(), "interpolated") {
+		t.Fatalf("unreachable interpolated step not reported: %v", err)
+	}
+	p.Smooth = false // the anchors alone are valid
+	if err := p.Validate(); err != nil {
+		t.Fatalf("anchors should be valid: %v", err)
+	}
 }

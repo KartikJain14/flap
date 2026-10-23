@@ -12,9 +12,10 @@ ssh -p 2222 flappy@game.example.com
   <img src="docs/screenshots/play.png" width="49%" alt="Gameplay: the bird between shaded green pipes over hills">
 </p>
 <p align="center">
-  <img src="docs/screenshots/golden-hour.png" width="32%" alt="Golden hour sky at score 27">
-  <img src="docs/screenshots/nightfall.png" width="32%" alt="Night sky with moon and stars at score 52">
-  <img src="docs/screenshots/aurora.png" width="32%" alt="Aurora sky at score 102">
+  <img src="docs/screenshots/golden-hour.png" width="24%" alt="Golden hour sky at score 27">
+  <img src="docs/screenshots/nightfall.png" width="24%" alt="Night sky with moon and stars at score 52">
+  <img src="docs/screenshots/aurora.png" width="24%" alt="Aurora sky at score 102">
+  <img src="docs/screenshots/daybreak.png" width="24%" alt="Daybreak sky at score 152">
 </p>
 <p align="center">
   <img src="docs/screenshots/game-over.png" width="49%" alt="Game over card with score, best and rank">
@@ -32,9 +33,18 @@ and cannot be submitted by clients.
   gradient, sun, moon, stars and aurora, parallax clouds and hills, shaded
   pipes, a scrolling ground and a procedurally rasterised bird that tilts and
   flaps. Each player gets their own bird colour.
-- **Five time-of-day stages** (Morning, Midday, Golden Hour, Nightfall,
-  Aurora). They change the sky as difficulty increases at 10, 25, 50 and 100
-  points, and a banner announces each one.
+- **Difficulty that keeps rising.** Speed, gap size and pipe spacing tighten
+  a little with every point instead of jumping between levels. The HUD shows
+  the current speed (100% at the start, 140% from 150 points). Six
+  time-of-day stages (Morning, Midday, Golden Hour, Nightfall, Aurora,
+  Daybreak) change the sky at 10, 25, 50, 100 and 150 points, and a banner
+  announces each speed-up.
+- **Sound effects through the terminal bell.** It rings when the game speeds
+  up, when you beat your personal best mid-run, and when you crash. Toggle it
+  with <kbd>S</kbd>; the setting is remembered. The bell is the only sound a
+  terminal can make on every platform (Windows Terminal, the Windows
+  console, Linux and macOS terminals), so it is one system "ding" rather than
+  distinct sounds. A terminal set to a visual bell flashes instead.
 - **Adapts to any terminal size.** Physics run in normalised world units, so a
   resize never changes the game state. The layout rescales, very wide or tall
   terminals are letterboxed to keep look-ahead fair, and a run is paused (with
@@ -69,6 +79,7 @@ and cannot be submitted by clients.
 | <kbd>N</kbd> | Change your name (players with an SSH key) |
 | <kbd>C</kbd> | Cycle colours: truecolor → 256 → 16 |
 | <kbd>U</kbd> | Toggle Unicode / ASCII graphics |
+| <kbd>S</kbd> | Sound effects on / off (terminal bell) |
 | <kbd>H</kbd> or <kbd>?</kbd> | Help |
 | <kbd>Q</kbd>, <kbd>Esc</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> | Quit (on the leaderboard and help screens <kbd>Esc</kbd> goes back) |
 
@@ -132,6 +143,10 @@ FIDO/security keys, and RSA of 2048 bits or more.
 - Colours look off (for example on macOS Terminal): press <kbd>C</kbd>.
 - Boxes or blocks look broken (legacy consoles, CJK "ambiguous width" fonts):
   press <kbd>U</kbd> for ASCII mode.
+- No sound? The game uses your terminal's bell. In Windows Terminal it is
+  audible by default (`bellStyle`). On Linux and macOS check the terminal's
+  bell setting, and note that tmux and screen only pass bells through when
+  configured to.
 - If the network drops mid-game, the server can't restore your terminal.
   Run `reset` (Linux or macOS) or open a new tab (Windows).
 
@@ -183,8 +198,8 @@ range-checked at startup, with all problems reported at once. Run
 | `[server]` | Listen address/port (default `0.0.0.0:2222`), host key files, identity secret, displayed server name, maintenance mode and message, shutdown grace period |
 | `[auth]` | `open` (keys + guests, default), `publickey` (keys only) or `allowlist` (authorised keys file, reloaded on SIGHUP); whether guests are ranked |
 | `[limits]` | Max connections (64), handshakes (16), games (20), per IP (3), per key (2); connection rates per IP and globally; failed-auth bans; handshake, session-start, idle (10 min), max session (2 h) and write (20 s) timeouts; keepalives; input rate; max PTY size |
-| `[ui]` | Gameplay and menu frame rates, minimum terminal size, default colour and glyph modes |
-| `[game]` | Simulation tick rate, gravity, flap strength, pipe geometry and the difficulty stages. Stages that would make gaps unreachable are rejected. |
+| `[ui]` | Gameplay and menu frame rates, minimum terminal size, default colour, glyph and sound modes |
+| `[game]` | Simulation tick rate, gravity, flap strength, pipe geometry, smooth or stepped difficulty, and the difficulty stages. Curves that would make gaps unreachable (including interpolated steps) are rejected. |
 | `[storage]` | Database path, operation timeout, leaderboard size, run history retention, guest retention, startup integrity check |
 | `[logging]` | Level, JSON or text format, how client IPs are logged (`full`, `truncated`, `hashed`, `none`), periodic resource stats |
 

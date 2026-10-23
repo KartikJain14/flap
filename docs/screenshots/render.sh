@@ -9,6 +9,7 @@ render play-100x30 play
 render stage2-100x30 golden-hour
 render stage3-100x30 nightfall
 render stage4-100x30 aurora
+render stage5-100x30 daybreak
 render over-80x24 game-over 80
 render board-100x30 leaderboard
 render help-100x30 help

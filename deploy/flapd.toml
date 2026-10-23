@@ -78,6 +78,11 @@ min_height = 18
 # can switch in-game with C (colours) and U (Unicode/ASCII).
 default_color = "auto"          # auto | truecolor | 256 | 16
 default_glyphs = "auto"         # auto | unicode | ascii
+# Sound effects use the terminal bell (BEL), the only sound a terminal can
+# make on every platform: it rings when the game speeds up, on a crash and on
+# a new personal best. Players toggle it with S; terminals may be set to a
+# visual bell or silence instead.
+default_sound = "on"            # on | off
 
 [game]
 # World units: the playfield height is 1.0.
@@ -88,9 +93,15 @@ max_fall_speed = 1.45
 pipe_width = 0.16
 gap_margin = 0.08
 first_pipe_distance = 1.0
+# Ramp speed, gap, spacing and gap shift smoothly between stages so the game
+# gets a little harder with every point. When false, difficulty changes only
+# at each stage's min_score.
+smooth_difficulty = true
 
-# Difficulty curve. Defining any [[game.stages]] replaces all of them. The
-# server rejects stages whose gaps could become unreachable.
+# Difficulty curve. Defining any [[game.stages]] replaces all of them. Each
+# stage also changes the sky (morning, midday, golden hour, nightfall, aurora,
+# daybreak). The server rejects curves whose gaps could become unreachable,
+# including the interpolated steps between stages.
 [[game.stages]]
 min_score = 0
 speed = 0.5
@@ -121,9 +132,16 @@ gap_shift = 0.3
 
 [[game.stages]]
 min_score = 100
-speed = 0.65
+speed = 0.66
 gap = 0.29
 spacing = 0.82
+gap_shift = 0.32
+
+[[game.stages]]
+min_score = 150
+speed = 0.7
+gap = 0.28
+spacing = 0.8
 gap_shift = 0.32
 
 [storage]

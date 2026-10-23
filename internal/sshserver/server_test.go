@@ -714,3 +714,23 @@ func TestWeakClientKeysRejected(t *testing.T) {
 		t.Fatalf("2048-bit RSA key rejected: %v", err)
 	}
 }
+
+// TestBellReachesClient checks the sound effect (a terminal bell) actually
+// arrives at the client's terminal when the bird crashes.
+func TestBellReachesClient(t *testing.T) {
+	ts := startServer(t, "", nil)
+	tm := ts.open(t, newKey(t), 80, 24)
+	tm.waitFor(5*time.Second, "PRESS")
+	tm.send(" ")
+	tm.waitFor(6*time.Second, "GAME OVER")
+	tm.mu.Lock()
+	raw := string(tm.raw)
+	tm.mu.Unlock()
+	if !strings.Contains(raw, "\a") {
+		t.Fatal("no bell (BEL) was sent on crash")
+	}
+	tm.send("s") // sound off is remembered for this key
+	time.Sleep(300 * time.Millisecond)
+	tm.send("q")
+	tm.waitEnd(5 * time.Second)
+}

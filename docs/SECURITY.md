@@ -117,7 +117,9 @@ off. Zero is rejected.
 ### Terminal safety (output)
 
 Everything shown to a player passes through one encoder
-(`internal/canvas/encode.go`). It writes nothing but SGR colour sequences,
+(`internal/canvas/encode.go`). The only exception is the sound effect: a
+constant BEL byte sent with `tea.Raw`, which never contains player data.
+The encoder writes nothing but SGR colour sequences,
 newlines and printable runes. Control characters (C0, DEL, C1), bidi
 overrides and isolates, zero-width and format characters, private-use runes
 and surrogates become `?`, and zero-width runes are dropped. Wide runes are

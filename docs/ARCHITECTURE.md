@@ -160,8 +160,14 @@ Interrupted runs are saved with reason `shutdown`. systemd's
   mapping to cells. The visible width is clamped to 1.35–2.2 units
   (letterboxing beyond that), so look-ahead stays within a fair range on any
   terminal shape.
-- Difficulty stages are chosen by pipe index, so the course depends only on
-  the seed. Validation rejects configurations where the next gap could be
+- Difficulty is a list of anchor stages. With `smooth_difficulty` (the
+  default), `Params.StageAt(score)` interpolates speed, gap, spacing and gap
+  shift between anchors, so the game gets harder with every point; past the
+  last anchor the values stay fixed. The stage index, which drives the sky
+  theme, the banner and the bell, still changes only at each anchor's
+  `min_score`.
+- Gap and spacing for pipe *i* use `StageAt(i)`, so the course depends only
+  on the seed. Validation rejects configurations where the next gap could be
   higher than the bird can climb (with a 20% margin). A test shows a simple
   bot with a 120 ms reaction delay (a slow SSH round trip) averages about 80
   points.
@@ -213,12 +219,33 @@ static and cost very little.
 CPU per frame (simulate + render + encode, `BenchmarkFrame`) is 39 µs at
 50×18 and 244 µs at 160×50. Bubble Tea's parse and diff add a similar amount.
 
+## Sound
+
+Over SSH the server can only send terminal control sequences. It cannot play
+audio files. The terminal bell (BEL, `\a`) is the only sound supported
+across Windows Terminal, the Windows console, and Linux and macOS terminals.
+flapd therefore uses it as its sound effect, rung through `tea.Raw`, which
+Bubble Tea writes between frames.
+
+- **When it rings:** stage changes (speed-ups), beating your personal best
+  during a run, and crashing. Bells less than 0.35 s apart are merged, and
+  nothing rings per flap or per point.
+- **Preference:** players toggle it with S. It is stored per player
+  (`players.sound_mode`, schema migration 2), and the default comes from
+  `ui.default_sound`.
+- **DECPS was rejected.** The VT520 sequence for playing notes is
+  implemented only by Windows Terminal and Contour. In Windows Terminal it
+  also blocks further output until the notes finish
+  ([microsoft/terminal#13208](https://github.com/microsoft/terminal/pull/13208)),
+  which would freeze the game display.
+
 ## Persistence
 
 ```sql
 players(id, kind['key'|'guest'], identity UNIQUE (64-hex HMAC, NULL for guests),
         name, name_key UNIQUE (look-alike key), created_at, last_seen_at,
-        best_score, best_at, total_runs, total_score, color_mode, glyph_mode)
+        best_score, best_at, total_runs, total_score, color_mode, glyph_mode,
+        sound_mode)
 runs(id, run_uuid UNIQUE, player_id → players ON DELETE CASCADE, score,
      duration_ms, ticks, flaps, seed, reason, ended_at)
 ```

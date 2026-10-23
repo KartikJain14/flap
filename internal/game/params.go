@@ -60,6 +60,10 @@ type Params struct {
 	FirstPipe float64
 	// Stages is the difficulty curve, ordered by MinScore.
 	Stages []Stage
+	// Smooth interpolates speed, gap, spacing and gap shift between stages,
+	// so difficulty rises a little with every point instead of jumping at
+	// stage boundaries. Stage indices (and themes) still change at MinScore.
+	Smooth bool
 }
 
 // DefaultParams returns the tuned default parameters.
@@ -76,6 +80,7 @@ func DefaultParams() Params {
 		GapMargin:    0.08,
 		FirstPipe:    1.0,
 		Stages:       DefaultStages(),
+		Smooth:       true,
 	}
 }
 
@@ -86,7 +91,44 @@ func DefaultStages() []Stage {
 		{MinScore: 10, Speed: 0.54, Gap: 0.34, Spacing: 0.88, GapShift: 0.24},
 		{MinScore: 25, Speed: 0.58, Gap: 0.32, Spacing: 0.86, GapShift: 0.28},
 		{MinScore: 50, Speed: 0.62, Gap: 0.30, Spacing: 0.84, GapShift: 0.30},
-		{MinScore: 100, Speed: 0.65, Gap: 0.29, Spacing: 0.82, GapShift: 0.32},
+		{MinScore: 100, Speed: 0.66, Gap: 0.29, Spacing: 0.82, GapShift: 0.32},
+		{MinScore: 150, Speed: 0.70, Gap: 0.28, Spacing: 0.80, GapShift: 0.32},
+	}
+}
+
+// StageIndex returns the index of the stage active at the given score.
+func (p Params) StageIndex(score int) int {
+	idx := 0
+	for i, st := range p.Stages {
+		if score >= st.MinScore {
+			idx = i
+		}
+	}
+	return idx
+}
+
+// StageAt returns the difficulty in effect at the given score. With Smooth,
+// values are interpolated towards the next stage; past the last stage they
+// stay at its values.
+func (p Params) StageAt(score int) Stage {
+	i := p.StageIndex(score)
+	s := p.Stages[i]
+	if !p.Smooth || i+1 >= len(p.Stages) {
+		return s
+	}
+	n := p.Stages[i+1]
+	span := n.MinScore - s.MinScore
+	if span <= 0 {
+		return s
+	}
+	t := float64(score-s.MinScore) / float64(span)
+	l := func(a, b float64) float64 { return a + (b-a)*t }
+	return Stage{
+		MinScore: s.MinScore,
+		Speed:    l(s.Speed, n.Speed),
+		Gap:      l(s.Gap, n.Gap),
+		Spacing:  l(s.Spacing, n.Spacing),
+		GapShift: l(s.GapShift, n.GapShift),
 	}
 }
 
@@ -140,6 +182,17 @@ func (p Params) Validate() error {
 			// room to spare, otherwise the course can become impossible.
 			reach := 0.8 * p.MaxClimb(s.Spacing-p.PipeWidth, s.Speed)
 			check(s.GapShift <= reach, "stage %d: gap shift %g exceeds what the bird can comfortably climb (%.3f)", i, s.GapShift, reach)
+		}
+	}
+	// With smooth ramps, every interpolated step must be reachable too.
+	if len(errs) == 0 && p.Smooth {
+		last := p.Stages[len(p.Stages)-1].MinScore
+		for score := 0; score <= last; score++ {
+			s := p.StageAt(score)
+			if reach := 0.8 * p.MaxClimb(s.Spacing-p.PipeWidth, s.Speed); s.GapShift > reach {
+				errs = append(errs, fmt.Errorf("at score %d the interpolated gap shift %.3f exceeds what the bird can comfortably climb (%.3f)", score, s.GapShift, reach))
+				break
+			}
 		}
 	}
 	return errors.Join(errs...)

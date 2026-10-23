@@ -574,7 +574,11 @@ func cmdPlay(args []string) error {
 	if *ascii {
 		glyphs = tui.ASCII
 	}
-	app := tui.New(st, tui.Session{Player: p, KeyFingerprint: "local", Color: cm, Glyphs: glyphs, Width: 80, Height: 24},
+	sound, _ := tui.ParseSoundMode(cfg.UI.DefaultSound)
+	if m, ok := tui.ParseSoundMode(p.SoundMode); ok {
+		sound = m
+	}
+	app := tui.New(st, tui.Session{Player: p, KeyFingerprint: "local", Color: cm, Glyphs: glyphs, Sound: sound, Width: 80, Height: 24},
 		tui.Options{
 			Params: cfg.GameParams(), RenderFPS: cfg.UI.RenderFPS, MenuFPS: cfg.UI.MenuFPS,
 			MinWidth: cfg.UI.MinWidth, MinHeight: cfg.UI.MinHeight, LeaderboardSize: cfg.Storage.LeaderboardSize,

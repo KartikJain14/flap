@@ -52,6 +52,7 @@ type Player struct {
 	Runs      int
 	ColorMode string
 	GlyphMode string
+	SoundMode string
 }
 
 // End reasons for runs.
@@ -359,14 +360,14 @@ func fromMS(v sql.NullInt64) time.Time {
 	return time.UnixMilli(v.Int64)
 }
 
-const playerColumns = `id, kind, name, created_at, best_score, best_at, total_runs, color_mode, glyph_mode`
+const playerColumns = `id, kind, name, created_at, best_score, best_at, total_runs, color_mode, glyph_mode, sound_mode`
 
 func scanPlayer(row interface{ Scan(...any) error }) (Player, error) {
 	var p Player
 	var kind string
 	var created int64
 	var bestAt sql.NullInt64
-	if err := row.Scan(&p.ID, &kind, &p.Name, &created, &p.Best, &bestAt, &p.Runs, &p.ColorMode, &p.GlyphMode); err != nil {
+	if err := row.Scan(&p.ID, &kind, &p.Name, &created, &p.Best, &bestAt, &p.Runs, &p.ColorMode, &p.GlyphMode, &p.SoundMode); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Player{}, ErrNotFound
 		}
@@ -471,13 +472,21 @@ func (s *Store) Rename(ctx context.Context, id int64, name string) error {
 	})
 }
 
-// SetPrefs stores a player's display preferences.
-func (s *Store) SetPrefs(ctx context.Context, id int64, colorMode, glyphMode string) error {
-	if len(colorMode) > 16 || len(glyphMode) > 16 {
+// Prefs are a player's display and sound preferences.
+type Prefs struct {
+	ColorMode string
+	GlyphMode string
+	SoundMode string
+}
+
+// SetPrefs stores a player's display and sound preferences.
+func (s *Store) SetPrefs(ctx context.Context, id int64, p Prefs) error {
+	if len(p.ColorMode) > 16 || len(p.GlyphMode) > 16 || len(p.SoundMode) > 16 {
 		return errors.New("preference value too long")
 	}
 	return s.tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE players SET color_mode = ?, glyph_mode = ? WHERE id = ?`, colorMode, glyphMode, id)
+		_, err := tx.ExecContext(ctx, `UPDATE players SET color_mode = ?, glyph_mode = ?, sound_mode = ? WHERE id = ?`,
+			p.ColorMode, p.GlyphMode, p.SoundMode, id)
 		return err
 	})
 }

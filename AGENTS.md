@@ -22,7 +22,8 @@ tested and documented.
 
 ## Status (2026-10-24)
 
-**v1 is complete; every requirement in the brief is implemented.** All checks
+**v1 is complete; every requirement in the brief is implemented**, plus
+sound effects and a continuous difficulty ramp added on request. All checks
 pass:
 
 | Check | Command | Result |
@@ -92,6 +93,22 @@ tmux -L flaptest kill-server
 
 ## Decisions and gotchas (read before changing code)
 
+- **Sound is the terminal bell (BEL) only.** The user asked for sound
+  effects "if and only if" they work on both Windows and Linux. BEL is the
+  only cross-platform terminal sound; Windows Terminal's `bellStyle`
+  defaults to audible. DECPS tones were rejected: only Windows Terminal and
+  Contour implement them, and Windows Terminal blocks output while they
+  play. The bell rings on speed-up (stage change), mid-run new best and
+  crash, merged within 0.35 s. `S` toggles it, stored per player in
+  `players.sound_mode` (migration 2), with the default from
+  `ui.default_sound`. It is sent with `tea.Raw(bell)`, the only output that
+  bypasses the canvas encoder.
+- **Difficulty ramps smoothly** (`game.Params.Smooth`,
+  `game.smooth_difficulty`). `StageAt(score)` interpolates between anchor
+  stages; `StageIndex` still drives themes and banners. There are 6 stages
+  and 6 themes (the last is Daybreak at 150). `Validate` checks every
+  interpolated step for reachability.
+
 - **ONLCR in `sshserver/iowrap.go` is essential.** Bubble Tea assumes `\n`
   returns to column 0 when its input is not a TTY. flapd has no server PTY
   and the client is in raw mode, so the output writer expands LF to CR LF.
@@ -154,4 +171,13 @@ Measured on a Ryzen 5 5600X, static binary, 256 colours:
 
   Added `remove-player`, store latency benchmarks, and this file.
 - 2026-10-24: Initialised git and pushed the first commit to
-  `origin/main` (github.com/KartikJain14/flap), at the user's request.
+  `origin/main` (github.com/KartikJain14/flap), at the user's request. The
+  user does not want Co-Authored-By or any other Claude attribution in
+  commits.
+- 2026-10-24: Added sound effects (terminal bell; `S` toggle; per-player
+  preference via schema migration 2; `ui.default_sound`). Added a smooth
+  difficulty ramp, a sixth stage at 150 with the Daybreak sky, and a speed %
+  readout in the HUD and speed-up banner.
+  - Verified: unit tests; an SSH test that BEL reaches the client; and the
+    real OpenSSH client in tmux with an `alert-bell` hook (crash rings,
+    S-off is silent, S-on rings a sample).

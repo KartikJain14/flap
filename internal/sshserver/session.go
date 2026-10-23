@@ -159,7 +159,7 @@ func detectGlyphs(term string, env map[string]string) tui.GlyphMode {
 	return tui.Unicode
 }
 
-func (s *Server) displayModes(st startReq, p store.Player) (canvas.ColorMode, tui.GlyphMode) {
+func (s *Server) displayModes(st startReq, p store.Player) (canvas.ColorMode, tui.GlyphMode, tui.SoundMode) {
 	color := detectColor(st.pty.term, st.env["COLORTERM"])
 	if m, ok := canvas.ParseColorMode(s.cfg.UI.DefaultColor); ok {
 		color = m
@@ -174,7 +174,11 @@ func (s *Server) displayModes(st startReq, p store.Player) (canvas.ColorMode, tu
 	if m, ok := tui.ParseGlyphMode(p.GlyphMode); ok {
 		glyphs = m
 	}
-	return color, glyphs
+	sound, _ := tui.ParseSoundMode(s.cfg.UI.DefaultSound)
+	if m, ok := tui.ParseSoundMode(p.SoundMode); ok {
+		sound = m
+	}
+	return color, glyphs, sound
 }
 
 func (s *Server) handleSession(sconn *ssh.ServerConn, ch ssh.Channel, reqs <-chan *ssh.Request, id identity,
@@ -244,7 +248,7 @@ func (s *Server) handleSession(sconn *ssh.ServerConn, ch ssh.Channel, reqs <-cha
 	s.stats.sessions.Add(1)
 
 	player, resolve, storageDown := s.profile(ctx, id, log)
-	color, glyphs := s.displayModes(st, player)
+	color, glyphs, sound := s.displayModes(st, player)
 	app := tui.New(s.store, tui.Session{
 		Player:         player,
 		Guest:          id.guest(),
@@ -253,6 +257,7 @@ func (s *Server) handleSession(sconn *ssh.ServerConn, ch ssh.Channel, reqs <-cha
 		StorageDown:    storageDown,
 		Color:          color,
 		Glyphs:         glyphs,
+		Sound:          sound,
 		Width:          st.pty.w,
 		Height:         st.pty.h,
 	}, tui.Options{
@@ -294,7 +299,7 @@ func (s *Server) handleSession(sconn *ssh.ServerConn, ch ssh.Channel, reqs <-cha
 	s.wg.Go(func() { s.watchdog(ctx, cancel, e, in, out, sconn, start, runDone, &endCause, log) })
 
 	log.Info("game started", "term", st.pty.term, "size", fmt.Sprintf("%dx%d", st.pty.w, st.pty.h),
-		"color", color.String(), "glyphs", glyphs.String(), "sessions", s.sessions.count())
+		"color", color.String(), "glyphs", glyphs.String(), "sound", sound.String(), "sessions", s.sessions.count())
 	_, runErr := prog.Run()
 	close(runDone)
 

@@ -306,6 +306,8 @@ sudo ./deploy/uninstall.sh --purge     # also deletes data, config and the flapd
 | `database integrity check failed` | Restore from backup (see above) |
 | `host key ... is accessible by other users` | Run `sudo chmod 600 /var/lib/flapd/ssh_host_ed25519_key /var/lib/flapd/identity_secret` |
 | High bandwidth | Lower `ui.render_fps`. Truecolor clients use about 70% more than 256-colour clients. |
+| No sound | Sound is the terminal bell. Check that it is on (`S`; the welcome screen shows "S sound: on") and that the terminal's bell is audible: Windows Terminal `bellStyle` (audible by default), GNOME/Konsole/kitty bell settings, or tmux `bell-action`. Alacritty and foot are silent by default. |
+| Too many beeps | Press `S` to turn sound off (remembered per key), or set `ui.default_sound = "off"` for everyone |
 
 ## Client compatibility checklist
 

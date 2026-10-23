@@ -45,7 +45,7 @@ type Store interface {
 	Rank(ctx context.Context, playerID int64) (int, int, error)
 	RecentRuns(ctx context.Context, playerID int64, limit int) ([]store.RunSummary, error)
 	Rename(ctx context.Context, playerID int64, name string) error
-	SetPrefs(ctx context.Context, playerID int64, colorMode, glyphMode string) error
+	SetPrefs(ctx context.Context, playerID int64, p store.Prefs) error
 }
 
 // Options configures a Server.

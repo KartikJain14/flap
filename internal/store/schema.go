@@ -42,4 +42,6 @@ CREATE TABLE runs (
 CREATE INDEX runs_player ON runs (player_id, ended_at DESC);
 CREATE INDEX runs_ended ON runs (ended_at);
 `,
+	// 2: per-player sound preference.
+	`ALTER TABLE players ADD COLUMN sound_mode TEXT NOT NULL DEFAULT '';`,
 }

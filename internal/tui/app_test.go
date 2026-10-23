@@ -514,11 +514,11 @@ func TestColorModesEncodeCorrectly(t *testing.T) {
 	// C cycles the mode and persists it.
 	h.app.color = canvas.TrueColor
 	h.key("c")
-	if h.app.color != canvas.Color256 || h.st.prefs[0] != "256" {
-		t.Fatalf("colour toggle: %v, stored %q", h.app.color, h.st.prefs[0])
+	if h.app.color != canvas.Color256 || h.st.prefs.ColorMode != "256" {
+		t.Fatalf("colour toggle: %v, stored %q", h.app.color, h.st.prefs.ColorMode)
 	}
 	h.key("u")
-	if h.app.glyphs != ASCII || h.st.prefs[1] != "ascii" {
+	if h.app.glyphs != ASCII || h.st.prefs.GlyphMode != "ascii" {
 		t.Fatal("glyph toggle not applied/persisted")
 	}
 }
@@ -611,5 +611,97 @@ func BenchmarkFrame(b *testing.B) {
 			}
 			b.ReportMetric(float64(bytesOut), "bytes/view")
 		})
+	}
+}
+
+func bells(h *harness) int {
+	n := 0
+	for _, r := range h.raw {
+		n += strings.Count(r, bell)
+	}
+	return n
+}
+
+func crash(h *harness) {
+	for i := 0; i < 30*6 && h.app.screen == screenPlay; i++ {
+		h.frames(1, 30)
+	}
+}
+
+func TestSoundEffects(t *testing.T) {
+	h := newHarness(t, 80, 24)
+	if h.app.sound != SoundOn {
+		t.Fatal("sound should default to on")
+	}
+	h.key("space")
+	crash(h)
+	if got := bells(h); got != 1 {
+		t.Fatalf("crash rang %d bells, want 1", got)
+	}
+	for _, r := range h.raw {
+		if strings.Trim(r, bell) != "" {
+			t.Fatalf("raw output other than BEL: %q", r)
+		}
+	}
+	// S turns sound off, persists it, and stays silent.
+	h.frames(30, 12)
+	h.key("s")
+	if h.app.sound != SoundOff || h.st.prefs.SoundMode != "off" {
+		t.Fatalf("sound %v, stored %q", h.app.sound, h.st.prefs.SoundMode)
+	}
+	before := bells(h)
+	h.key("space")
+	crash(h)
+	if bells(h) != before {
+		t.Fatal("bell rang while sound was off")
+	}
+	// Turning it back on rings once so the player knows what to expect.
+	h.key("s")
+	if h.app.sound != SoundOn || h.st.prefs.SoundMode != "on" || bells(h) != before+1 {
+		t.Fatalf("sound on: %v, stored %q, bells %d", h.app.sound, h.st.prefs.SoundMode, bells(h)-before)
+	}
+	w := newHarness(t, 110, 30)
+	w.key("s")
+	if !strings.Contains(w.screen(), "S sound: off") {
+		t.Fatalf("welcome status bar does not show the sound setting:\n%s", w.screen())
+	}
+}
+
+func TestStoredSoundPreferenceIsRespected(t *testing.T) {
+	h := newHarness(t, 80, 24, func(s *Session, o *Options) { s.Sound = SoundOff })
+	h.key("space")
+	crash(h)
+	if bells(h) != 0 {
+		t.Fatal("bell rang although the player turned sound off")
+	}
+}
+
+func TestSpeedUpRingsAndShowsSpeed(t *testing.T) {
+	h := newHarness(t, 100, 30)
+	h.key("space")
+	if !strings.Contains(h.screen(), "SPEED 100%") {
+		t.Fatalf("HUD lacks the starting speed:\n%s", h.screen())
+	}
+	for i := 0; i < 30*120 && h.app.world.Score() < 10; i++ {
+		h.autopilot(1)
+		if h.app.screen != screenPlay {
+			t.Fatalf("autopilot crashed at %d", h.app.world.Score())
+		}
+	}
+	h.autopilot(3)
+	if h.app.world.Stage() != 1 || bells(h) != 1 {
+		t.Fatalf("stage %d, bells %d after reaching 10 points", h.app.world.Stage(), bells(h))
+	}
+	text := h.screen()
+	pct := h.app.speedPercent()
+	if pct <= 100 || !strings.Contains(text, fmt.Sprintf("SPEED %d%%", pct)) || !strings.Contains(text, "MIDDAY") {
+		t.Fatalf("speed-up not shown (speed %d%%):\n%s", pct, text)
+	}
+	// Speed keeps creeping up with every point, not only at stage changes.
+	for i := 0; i < 30*30 && h.app.world.Score() < 14; i++ {
+		h.autopilot(1)
+	}
+	if h.app.speedPercent() <= pct {
+		t.Fatalf("speed did not increase between stages: %d%% -> %d%%", pct, h.app.speedPercent())
 	}
 }

@@ -54,6 +54,41 @@ func ParseGlyphMode(s string) (GlyphMode, bool) {
 	return Unicode, false
 }
 
+// SoundMode selects whether sound effects play.
+type SoundMode uint8
+
+const (
+	// SoundOn rings the terminal bell on speed-ups, new bests and crashes.
+	SoundOn SoundMode = iota
+	// SoundOff is silent.
+	SoundOff
+)
+
+func (s SoundMode) String() string {
+	if s == SoundOff {
+		return "off"
+	}
+	return "on"
+}
+
+// ParseSoundMode parses the String form of a SoundMode.
+func ParseSoundMode(s string) (SoundMode, bool) {
+	switch s {
+	case "on":
+		return SoundOn, true
+	case "off":
+		return SoundOff, true
+	}
+	return SoundOn, false
+}
+
+// bell is the terminal bell (BEL). It is the only sound every terminal can
+// make on every platform: Windows Terminal, the Windows console, Linux and
+// macOS terminals all ring (or flash, if configured) on it. It is a single
+// control byte that does not move the cursor or change colours, so it can
+// be written between frames safely.
+const bell = "\a"
+
 // Store is the persistence the UI depends on. *store.Store implements it.
 type Store interface {
 	RecordRun(ctx context.Context, playerID int64, r store.Run) (store.RunResult, error)
@@ -61,7 +96,7 @@ type Store interface {
 	Rank(ctx context.Context, playerID int64) (rank, total int, err error)
 	RecentRuns(ctx context.Context, playerID int64, limit int) ([]store.RunSummary, error)
 	Rename(ctx context.Context, playerID int64, name string) error
-	SetPrefs(ctx context.Context, playerID int64, colorMode, glyphMode string) error
+	SetPrefs(ctx context.Context, playerID int64, p store.Prefs) error
 }
 
 // Session describes the connected player.
@@ -79,6 +114,7 @@ type Session struct {
 	StorageDown bool
 	Color       canvas.ColorMode
 	Glyphs      GlyphMode
+	Sound       SoundMode
 	Width       int
 	Height      int
 }
@@ -191,6 +227,7 @@ type App struct {
 	lay    layout
 	color  canvas.ColorMode
 	glyphs GlyphMode
+	sound  SoundMode
 	g      glyphSet
 
 	screen     screen
@@ -237,6 +274,10 @@ type App struct {
 
 	// Preferences persistence.
 	prefsDirty, prefsBusy bool
+
+	// Sound effects queued during an update, sent with its commands.
+	soundOut strings.Builder
+	lastBell float64
 
 	// Presentation.
 	t          float64
@@ -292,6 +333,7 @@ func New(st Store, sess Session, opt Options) *App {
 		now:    opt.Now,
 		rng:    rand.New(rand.NewPCG(opt.Seed(), 0x5eed)),
 		color:  sess.Color,
+		sound:  sess.Sound,
 		glyphs: sess.Glyphs,
 		scene:  newScene(),
 		cv:     canvas.New(0, 0),
@@ -300,6 +342,7 @@ func New(st Store, sess Session, opt Options) *App {
 		runs:   sess.Player.Runs,
 	}
 	a.themeFrom, a.themeTo, a.themeT = themes[0], themes[0], 1
+	a.lastBell = -1
 	a.g = glyphsFor(a.glyphs)
 	a.resize(sess.Width, sess.Height)
 	return a
@@ -406,9 +449,9 @@ func (a *App) Update(msg tea.Msg) (m tea.Model, cmd tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.resize(msg.Width, msg.Height)
 	case TickMsg:
-		return a, a.tick(msg.At)
+		return a, a.flushSound(a.tick(msg.At))
 	case tea.KeyPressMsg:
-		return a, a.key(msg)
+		return a, a.flushSound(a.key(msg))
 	case savedMsg:
 		return a, a.onSaved(msg)
 	case retrySaveMsg:
@@ -583,12 +626,15 @@ func (a *App) handleEvents() {
 			if !a.runBest && a.Best() > 0 && e.Score > a.Best() {
 				a.runBest = true
 				a.showBanner("NEW BEST", "keep going!")
+				a.ringBell()
 			}
 		case game.EventStage:
 			th := themeFor(e.Stage)
 			a.setTheme(th, false)
-			a.showBanner(strings.ToUpper(th.name), "the pace picks up")
+			a.showBanner(strings.ToUpper(th.name), fmt.Sprintf("faster: speed %d%%", a.speedPercent()))
+			a.ringBell()
 		case game.EventCrash:
+			a.ringBell()
 			x, y := a.birdPixel()
 			sk := skins[a.skinIndex()]
 			for i := 0; i < 14; i++ {
@@ -851,6 +897,47 @@ func (a *App) openBoard() tea.Cmd {
 	return a.loadBoard()
 }
 
+// speedPercent is the current scroll speed relative to the starting speed.
+func (a *App) speedPercent() int {
+	if a.world == nil {
+		return 100
+	}
+	return int(math.Round(100 * a.world.Speed() / a.opt.Params.StageAt(0).Speed))
+}
+
+// ringBell queues a terminal bell when sound is on. Bells less than 0.35 s
+// apart are merged so events in quick succession do not stack up.
+func (a *App) ringBell() {
+	if a.sound != SoundOn || a.t-a.lastBell < 0.35 {
+		return
+	}
+	a.lastBell = a.t
+	a.soundOut.WriteString(bell)
+}
+
+// flushSound sends queued sound effects along with cmd.
+func (a *App) flushSound(cmd tea.Cmd) tea.Cmd {
+	if a.soundOut.Len() == 0 {
+		return cmd
+	}
+	seq := a.soundOut.String()
+	a.soundOut.Reset()
+	return tea.Batch(cmd, tea.Raw(seq))
+}
+
+// toggleSound switches sound on or off and rings once when turned on so
+// the player knows what to listen for.
+func (a *App) toggleSound() tea.Cmd {
+	if a.sound == SoundOn {
+		a.sound = SoundOff
+	} else {
+		a.sound = SoundOn
+		a.lastBell = -1
+		a.ringBell()
+	}
+	return a.savePrefs()
+}
+
 func (a *App) savePrefs() tea.Cmd {
 	if a.sess.Player.ID == 0 || a.st == nil {
 		a.prefsDirty = false
@@ -861,11 +948,12 @@ func (a *App) savePrefs() tea.Cmd {
 		return nil
 	}
 	a.prefsBusy, a.prefsDirty = true, false
-	st, id, c, g, timeout := a.st, a.sess.Player.ID, a.color.String(), a.glyphs.String(), a.opt.StoreTimeout
+	st, id, timeout := a.st, a.sess.Player.ID, a.opt.StoreTimeout
+	prefs := store.Prefs{ColorMode: a.color.String(), GlyphMode: a.glyphs.String(), SoundMode: a.sound.String()}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		return prefsMsg{err: st.SetPrefs(ctx, id, c, g)}
+		return prefsMsg{err: st.SetPrefs(ctx, id, prefs)}
 	}
 }
 
@@ -955,6 +1043,8 @@ func (a *App) key(msg tea.KeyPressMsg) tea.Cmd {
 		case "u":
 			a.toggleGlyphs()
 			return a.savePrefs()
+		case "s":
+			return a.toggleSound()
 		}
 	case screenPlay:
 		return a.keyPlay(k)
@@ -977,6 +1067,8 @@ func (a *App) key(msg tea.KeyPressMsg) tea.Cmd {
 		case "u":
 			a.toggleGlyphs()
 			return a.savePrefs()
+		case "s":
+			return a.toggleSound()
 		}
 	case screenBoard:
 		pages := a.boardPages()
@@ -1048,6 +1140,8 @@ func (a *App) keyPlay(k string) tea.Cmd {
 			a.toggleGlyphs()
 			return a.savePrefs()
 		}
+	case "s":
+		return a.toggleSound()
 	case "q", "esc":
 		a.markQuit()
 		return tea.Quit
