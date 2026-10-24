@@ -181,3 +181,16 @@ Measured on a Ryzen 5 5600X, static binary, 256 colours:
   - Verified: unit tests; an SSH test that BEL reaches the client; and the
     real OpenSSH client in tmux with an `alert-bell` hook (crash rings,
     S-off is silent, S-on rings a sample).
+- 2026-10-24: Added developer credits at the user's request: "made by
+  Kartik Jain" under the welcome card (`credit` in `tui/screens.go`; in
+  `welcomeLayout` it outranks card spacing and the subtitle but never costs
+  leaderboard rows), an ABOUT section in the help overlay, and a Credits
+  section in the README. Regenerated welcome, compact and help screenshots.
+  - The user asked how to host on port 22 (admin sshd on 2222) and wants
+    **instructions only, no deployment code changes**. The working recipe:
+    install with `--port 22 --allow-port-22 --no-start`, then a manual
+    systemd drop-in with `CapabilityBoundingSet=` and
+    `AmbientCapabilities=CAP_NET_BIND_SERVICE` plus `PrivateUsers=false`
+    (the unit otherwise cannot bind ports below 1024). This was verified in
+    the Debian 12 and Ubuntu 24.04 systemd containers: exposure 1.5, real
+    sessions on port 22. The installer changes were reverted.

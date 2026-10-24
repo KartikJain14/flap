@@ -346,6 +346,12 @@ server sends standard VT sequences and always emits CR LF newlines, which
 these clients handle. [docs/OPERATIONS.md](docs/OPERATIONS.md#client-compatibility-checklist)
 has a manual checklist for them.
 
+## Credits
+
+Flap is designed and developed by
+[Kartik Jain](https://github.com/KartikJain14). The game also credits its
+developer on the welcome screen and in the in-game help.
+
 ## License
 
 No license has been chosen yet; add one before publishing.

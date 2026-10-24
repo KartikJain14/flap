@@ -12,6 +12,9 @@ import (
 	"flap/internal/store"
 )
 
+// credit names the game's developer on the welcome and help screens.
+const credit = "made by Kartik Jain"
+
 // glyphSet holds the symbols used by the UI in each glyph mode.
 type glyphSet struct {
 	box                                canvas.BoxStyle
@@ -281,6 +284,7 @@ type welcomeLayout struct {
 	subRow         int
 	showSub        bool
 	card           canvas.Rect
+	showCredit     bool // the credit line under the card's shadow
 	boardN         int
 	roomy          bool
 }
@@ -320,31 +324,37 @@ func (a *App) welcomeLayout() welcomeLayout {
 		// The preview shows up to five entries but never reserves rows for
 		// entries that do not exist.
 		want := min(5, max(1, len(a.top)))
+		// The credit outranks spacing and the subtitle, not the leaderboard.
 		for _, boardN := range []int{want, min(want, 3), 0} {
-			for _, roomy := range []bool{true, false} {
-				for _, sub := range []bool{true, false} {
-					cardH := a.welcomeCardLines(boardN, roomy) + 2
-					total := titleRows + 1 + cardH
-					if sub {
-						total++
+			for _, credit := range []bool{true, false} {
+				for _, roomy := range []bool{true, false} {
+					for _, sub := range []bool{true, false} {
+						cardH := a.welcomeCardLines(boardN, roomy) + 2
+						total := titleRows + 1 + cardH
+						if sub {
+							total++
+						}
+						if credit {
+							total += 2 // the card's shadow, then the credit
+						}
+						if total > avail {
+							continue
+						}
+						top := 1 + (avail-total)/2
+						groupX := (l.w - groupW) / 2
+						wl := welcomeLayout{titleScale: scale, boardN: boardN, roomy: roomy, showSub: sub, showCredit: credit, birdSX: birdSX, birdSY: birdSY}
+						wl.titleX = groupX + birdW + 2
+						wl.titleY = top * l.ppc
+						wl.birdX = float64(groupX) + float64(birdW)/2
+						wl.birdY = float64(wl.titleY) + float64(titleH)/2 + math.Sin(a.t*2.4)*float64(l.ppc)
+						row := top + titleRows
+						if sub {
+							wl.subRow = row
+							row++
+						}
+						wl.card = canvas.Rect{X: (l.w - cardW) / 2, Y: row + 1, W: cardW, H: cardH}
+						return wl
 					}
-					if total > avail {
-						continue
-					}
-					top := 1 + (avail-total)/2
-					groupX := (l.w - groupW) / 2
-					wl := welcomeLayout{titleScale: scale, boardN: boardN, roomy: roomy, showSub: sub, birdSX: birdSX, birdSY: birdSY}
-					wl.titleX = groupX + birdW + 2
-					wl.titleY = top * l.ppc
-					wl.birdX = float64(groupX) + float64(birdW)/2
-					wl.birdY = float64(wl.titleY) + float64(titleH)/2 + math.Sin(a.t*2.4)*float64(l.ppc)
-					row := top + titleRows
-					if sub {
-						wl.subRow = row
-						row++
-					}
-					wl.card = canvas.Rect{X: (l.w - cardW) / 2, Y: row + 1, W: cardW, H: cardH}
-					return wl
 				}
 			}
 		}
@@ -450,6 +460,9 @@ func (a *App) drawWelcome() {
 	}
 	a.hints(in.X, r.Y+r.H-2, in.W, hs)
 
+	if wl.showCredit {
+		a.cv.TextCentered(0, r.Y+r.H+1, l.w, a.trunc(credit, l.w-2), hex(0x14213f), canvas.Bold)
+	}
 	a.drawStatusBar()
 }
 
@@ -747,11 +760,15 @@ func (a *App) drawHelp() {
 		{"", "TIPS", true},
 		{"", "Short taps beat long holds. Aim for the lower half of each gap.", false},
 		{"", "If colors look wrong press C; if borders look broken press U.", false},
+		{"", "", false},
+		{"", "ABOUT", true},
+		{"", "Flap is " + credit + " (github.com/KartikJain14).", false},
 	}
 	w := min(l.w-4, 70)
 	maxLines := l.h - 4
 	if len(lines) > maxLines {
-		// Drop the tips first, then identity, keeping the controls.
+		// Drop the credits first, then the tips and identity, keeping the
+		// controls.
 		lines = lines[:max(0, min(len(lines), maxLines))]
 	}
 	h := len(lines) + 4
