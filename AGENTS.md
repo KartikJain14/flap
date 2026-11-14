@@ -36,6 +36,9 @@ Migration 3 also grants existing profiles 3 wings. W purchases; SPACE saves/rest
 Unit/integration, race, vet/staticcheck and build were rerun for wings.
 Deployment, vulnerability, manual OpenSSH and load results below are from v1:
 
+Licensed under MIT, with `Copyright (c) 2026 Kartik Jain - jkartik.in` in
+the root `LICENSE`. Preserve the standard MIT text and attribution notice.
+
 | Check | Command | Result |
 |---|---|---|
 | Unit + integration tests | `make test` | pass (133 test functions; real SSH sessions through a VT emulator) |
@@ -62,7 +65,7 @@ sshd moved to 2222 to free port 22 for flapd.
    (56d1d0e) and is live on port 22; sshd moved to 2222. DB preserved (schema
    v5, 27 players, 378 runs, OK) with a fresh backup; `flapd.prev` kept. No VPS
    beyond this host was deployed.
-3. There is no LICENSE file; the user has to choose one.
+3. License selected: MIT; root `LICENSE` and README attribution are in place.
 4. The code is on GitHub at https://github.com/KartikJain14/flap (branch
    `main`). Commit and push only when the user asks.
 5. Optional ideas, none requested:
@@ -296,3 +299,14 @@ Measured on a Ryzen 5 5600X, static binary, 256 colours:
   (schema v5, 27 players, 378 runs) plus a fresh backup at
   `/var/lib/flapd/backups/flap-20261114T140618Z.db`; `flapd.prev` retained.
   sshd moved to 2222 to free port 22 for flapd.
+
+- 2026-11-14: Added the standard MIT License at the user's request for broad
+  reuse with attribution: `Copyright (c) 2026 Kartik Jain - jkartik.in`.
+  Updated the README and current licensing status. Explained that MIT
+  requires preservation of copyright/license notices, rather than a visible
+  in-game credit. Documentation/license-only change; checked diff formatting.
+
+- 2026-11-14: Pulled origin/main first on request (through ccac227) and
+  reconciled local MIT licensing changes with the new deployment notes.
+  Preserved upstream SSH instructions and deployment history; verified the
+  standard MIT text against the Open Source Initiative's published version.

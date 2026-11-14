@@ -371,4 +371,10 @@ developer on the welcome screen and in the in-game help.
 
 ## License
 
-No license has been chosen yet; add one before publishing.
+Flap is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Kartik Jain - jkartik.in
+
+Use, modify, host, and sell it freely; preserve the copyright and license
+notice in copies or substantial portions of the software. Third-party
+dependencies retain their respective licenses.
