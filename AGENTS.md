@@ -6,7 +6,7 @@ something.
 
 ## What this is
 
-Flap is a Flappy Bird–style terminal game served over SSH (`ssh -p 2222
+Flap is a Flappy Bird–style terminal game served over SSH (`ssh -p 22
 flappy@host`). It is a single static Go binary (`flapd`). The pieces:
 
 - its own hardened SSH server (`golang.org/x/crypto/ssh`, with no shell or
@@ -47,13 +47,21 @@ Deployment, vulnerability, manual OpenSSH and load results below are from v1:
 | Real OpenSSH 10.5 client | manual tmux procedure below | pass: play, resize, quit, guest, refusals |
 | Load | `bin/flapload` (see README, Performance) | 20 players, 0 failures, no leaks |
 
+**Live deployment (2026-11-14):** flapd v56d1d0e (wings build) was stopped,
+reinstalled with `deploy/install.sh --allow-port-22` and is running on port 22
+on this host; the healthcheck passed and `ssh -p 22 flappy@host` answered.
+sshd moved to 2222 to free port 22 for flapd.
+
 **Not done or not verified (open items):**
 
 1. Windows (Win32-OpenSSH, Windows Terminal, conhost), macOS Terminal,
    iTerm2 and PuTTY were not tested; no such machines were available. A
    manual checklist is in `docs/OPERATIONS.md#client-compatibility-checklist`.
-2. No real VPS deployment has been done. The user did not authorise one; do
-   not deploy without asking.
+2. A real deployment HAS now been done on this server at the user's explicit
+   request (2026-11-14): flapd was stopped, reinstalled from the wings build
+   (56d1d0e) and is live on port 22; sshd moved to 2222. DB preserved (schema
+   v5, 27 players, 378 runs, OK) with a fresh backup; `flapd.prev` kept. No VPS
+   beyond this host was deployed.
 3. There is no LICENSE file; the user has to choose one.
 4. The code is on GitHub at https://github.com/KartikJain14/flap (branch
    `main`). Commit and push only when the user asks.
@@ -280,3 +288,11 @@ Measured on a Ryzen 5 5600X, static binary, 256 colours:
   Updated pickup spacing/contact tests, restored the exact speed-up bell
   assertion (the first pickup is now after the first stage), and updated
   current documentation. User authorized committing and pushing all changes.
+
+- 2026-11-14: Deployed flapd on this server at port 22 at the user's request.
+  Stopped the running service, rebuilt from the wings commit (56d1d0e) and
+  reinstalled via `deploy/install.sh --allow-port-22`; the new version is live
+  (healthcheck: healthy, SSH banner answered on `[::1]:22`). Database kept: OK
+  (schema v5, 27 players, 378 runs) plus a fresh backup at
+  `/var/lib/flapd/backups/flap-20261114T140618Z.db`; `flapd.prev` retained.
+  sshd moved to 2222 to free port 22 for flapd.
