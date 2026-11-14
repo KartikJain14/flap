@@ -4,7 +4,7 @@ A Flappy Bird–inspired arcade game that lives entirely in your terminal and
 is played over SSH. Nothing to install: if you have `ssh`, you can play.
 
 ```sh
-ssh -p 2222 flappy@game.example.com
+ssh flap.jkartik.in
 ```
 
 <p align="center">
@@ -111,12 +111,12 @@ Windows 10/11 ship the OpenSSH client; use Windows Terminal or PowerShell.
 
 ```powershell
 # Windows PowerShell
-ssh -p 2222 flappy@YOUR_VPS_IP
+ssh flap.jkartik.in
 ```
 
 ```sh
 # Linux or macOS
-ssh -p 2222 flappy@YOUR_VPS_IP
+ssh flap.jkartik.in
 ```
 
 The user name is ignored, so any name works. On the first connection your
@@ -144,8 +144,8 @@ shows up as a different player. For convenience, add this to `~/.ssh/config`:
 
 ```
 Host flap
-    HostName YOUR_VPS_IP
-    Port 2222
+    HostName flap.jkartik.in
+    Port 22
     User flappy
     IdentityFile ~/.ssh/flap_ed25519
     IdentitiesOnly yes
