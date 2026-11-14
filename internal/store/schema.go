@@ -44,4 +44,34 @@ CREATE INDEX runs_ended ON runs (ended_at);
 `,
 	// 2: per-player sound preference.
 	`ALTER TABLE players ADD COLUMN sound_mode TEXT NOT NULL DEFAULT '';`,
+	// 3: persistent wings and idempotent continue purchases.
+	`ALTER TABLE players ADD COLUMN wings INTEGER NOT NULL DEFAULT 3 CHECK (wings >= 0);
+CREATE TABLE continues (
+    run_uuid TEXT NOT NULL CHECK (length(run_uuid) = 32),
+    retry INTEGER NOT NULL CHECK (retry BETWEEN 0 AND 30),
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    PRIMARY KEY (run_uuid, retry)
+) STRICT;
+CREATE INDEX continues_player ON continues(player_id);`,
+	// 4: collected wing receipts replace automatic score-based rewards.
+	`CREATE TABLE wing_pickups (
+ run_uuid TEXT NOT NULL CHECK (length(run_uuid) = 32),
+ pipe_index INTEGER NOT NULL CHECK (pipe_index >= 24 AND (pipe_index+1) % 25 = 0),
+ player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+ PRIMARY KEY (run_uuid, pipe_index)
+ ) STRICT;
+ CREATE INDEX wing_pickups_player ON wing_pickups(player_id);`,
+	// 5: pickup positions are defined by the simulation, allowing playtest
+	// intervals without invalidating previously collected wings.
+	`ALTER TABLE wing_pickups RENAME TO wing_pickups_old;
+ DROP INDEX wing_pickups_player;
+ CREATE TABLE wing_pickups (
+ run_uuid TEXT NOT NULL CHECK (length(run_uuid) = 32),
+ pipe_index INTEGER NOT NULL CHECK (pipe_index >= 0),
+ player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+ PRIMARY KEY (run_uuid, pipe_index)
+ ) STRICT;
+ INSERT INTO wing_pickups SELECT * FROM wing_pickups_old;
+ DROP TABLE wing_pickups_old;
+ CREATE INDEX wing_pickups_player ON wing_pickups(player_id);`,
 }

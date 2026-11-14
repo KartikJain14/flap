@@ -92,6 +92,8 @@ const bell = "\a"
 // Store is the persistence the UI depends on. *store.Store implements it.
 type Store interface {
 	RecordRun(ctx context.Context, playerID int64, r store.Run) (store.RunResult, error)
+	SpendWings(ctx context.Context, playerID int64, runID string, retry int) (int, error)
+	CollectWings(ctx context.Context, playerID int64, runID string, pipes []int) (int, error)
 	Leaderboard(ctx context.Context, offset, limit int) (store.Page, error)
 	Rank(ctx context.Context, playerID int64) (rank, total int, err error)
 	RecentRuns(ctx context.Context, playerID int64, limit int) ([]store.RunSummary, error)
@@ -102,7 +104,7 @@ type Store interface {
 // Session describes the connected player.
 type Session struct {
 	// Player is the stored profile. Its ID is zero for a guest who has not
-	// saved a run yet, or when storage was unavailable at connect time.
+	// saved a run or bought a continue yet, or when storage was unavailable at connect time.
 	Player store.Player
 	Guest  bool
 	// KeyFingerprint is shown in the help screen so players can tell which
@@ -208,6 +210,19 @@ type (
 		name string
 		err  error
 	}
+	wingsMsg struct {
+		runID   string
+		player  *store.Player
+		balance int
+		err     error
+	}
+	pickupMsg struct {
+		runID   string
+		retries int
+		balance int
+		player  *store.Player
+		err     error
+	}
 	prefsMsg struct{ err error }
 	quitMsg  struct{}
 )
@@ -235,23 +250,30 @@ type App struct {
 	overlay    overlay
 
 	// Current run.
-	world      *game.World
-	runID      string
-	paused     bool
-	pauseWhy   string
-	countdown  float64
-	acc        float64
-	overAt     float64
-	runBest    bool // passed the personal best during this run
-	birdAngle  float64
-	exitReason string
+	world         *game.World
+	runID         string
+	retries       int
+	continueOffer bool
+	continueLeft  float64
+	pickupPending bool
+	wingsBusy     bool
+	wingsErr      string
+	paused        bool
+	pauseWhy      string
+	countdown     float64
+	acc           float64
+	overAt        float64
+	runBest       bool // passed the personal best during this run
+	birdAngle     float64
+	exitReason    string
 
 	// Last finished run and its save status.
-	lastRun   store.Run
-	lastCrash game.Crash
-	save      saveState
-	saveErr   string
-	newRecord bool
+	lastRun     store.Run
+	lastCrash   game.Crash
+	save        saveState
+	saveErr     string
+	newRecord   bool
+	wingsEarned int
 
 	// Profile and leaderboard caches.
 	best, rank, ranked int
@@ -340,6 +362,9 @@ func New(st Store, sess Session, opt Options) *App {
 		dirty:  true,
 		best:   sess.Player.Best,
 		runs:   sess.Player.Runs,
+	}
+	if sess.Player.ID == 0 && sess.Resolve != nil && !sess.StorageDown {
+		a.sess.Player.Wings = 3
 	}
 	a.themeFrom, a.themeTo, a.themeT = themes[0], themes[0], 1
 	a.lastBell = -1
@@ -472,6 +497,11 @@ func (a *App) Update(msg tea.Msg) (m tea.Model, cmd tea.Cmd) {
 		a.onBoard(msg)
 	case renamedMsg:
 		a.onRenamed(msg)
+	case pickupMsg:
+		a.onPickup(msg)
+	case wingsMsg:
+		a.onWings(msg)
+		return a, a.flushSound(nil)
 	case prefsMsg:
 		a.prefsBusy = false
 		if msg.err != nil {
@@ -550,21 +580,37 @@ func (a *App) tick(at time.Time) tea.Cmd {
 	switch a.screen {
 	case screenPlay:
 		a.tickPlay(dt)
-		if a.world.Phase() == game.Over && a.t-a.overAt > 0.5 {
+		if a.continueOffer && !a.wingsBusy && !a.lay.tooSmall && a.quitAt == 0 {
+			a.continueLeft = math.Max(0, a.continueLeft-dt)
+			if a.continueLeft == 0 {
+				return tea.Batch(a.finishRun(), a.scheduleTick())
+			}
+		}
+		if a.world.Phase() == game.Over && a.t-a.overAt > 0.5 && !a.continueOffer {
+			if a.st != nil && (a.sess.Player.ID != 0 || a.sess.Resolve != nil) && a.sess.Player.Wings > 0 && store.ContinueCost(a.retries) > 0 {
+				a.continueOffer = true
+				a.continueLeft = 5
+				return a.scheduleTick()
+			}
 			cmd := a.finishRun()
 			return tea.Batch(cmd, a.scheduleTick())
 		}
 	case screenWelcome:
 		a.menuScroll += dt * 0.12
 	case screenOver, screenBoard:
-		if a.newRecord && a.screen == screenOver && a.t-a.overAt < 3.5 && a.rng.Float64() < 0.6 {
+		if (a.newRecord || a.wingsEarned > 0) && a.screen == screenOver && a.t-a.overAt < 3.5 && a.rng.Float64() < 0.6 {
 			a.confetti()
 		}
 	}
 	if a.quitAt > 0 && a.t >= a.quitAt {
 		return tea.Quit
 	}
-	return a.scheduleTick()
+	var pickup tea.Cmd
+	if a.pickupPending {
+		a.pickupPending = false
+		pickup = a.collectCmd()
+	}
+	return tea.Batch(pickup, a.scheduleTick())
 }
 
 func (a *App) tickPlay(dt float64) {
@@ -611,6 +657,16 @@ func (a *App) birdPixel() (x, y float64) {
 func (a *App) handleEvents() {
 	for _, e := range a.world.Events() {
 		switch e.Kind {
+		case game.EventWing:
+			a.pickupPending = true
+			a.sess.Player.Wings++
+			a.showBanner("+1 WING COLLECTED", "W to revive after a crash")
+			a.ringBell()
+			x, y := a.birdPixel()
+			for i := 0; i < 12; i++ {
+				ang := float64(i) * 2 * math.Pi / 12
+				a.fx.add(particle{x: x, y: y, vx: math.Cos(ang) * 35, vy: math.Sin(ang) * 25, ttl: 0.5, col: colGold})
+			}
 		case game.EventFlap:
 			x, y := a.birdPixel()
 			for i := 0; i < 2; i++ {
@@ -669,6 +725,9 @@ func (a *App) startRun() {
 	a.world = game.NewWorld(a.opt.Params, seed, math.Max(a.lay.viewW, minViewWidth))
 	a.world.Flap()
 	a.runID = store.NewRunID()
+	a.retries, a.continueOffer, a.wingsBusy, a.wingsErr = 0, false, false, ""
+	a.wingsEarned = 0
+	a.continueLeft, a.pickupPending = 0, false
 	a.screen = screenPlay
 	a.overlay = overlayNone
 	a.paused, a.pauseWhy = false, ""
@@ -712,11 +771,13 @@ func (a *App) buildRun(reason string) store.Run {
 		Seed:     w.Seed(),
 		Reason:   reason,
 		EndedAt:  a.now(),
+		Pickups:  w.CollectedWings(),
 	}
 }
 
 func (a *App) finishRun() tea.Cmd {
 	a.screen = screenOver
+	a.continueOffer = false
 	a.overAt = a.t
 	a.lastCrash = a.world.Crash()
 	r := a.buildRun(crashReason(a.world.Crash()))
@@ -775,10 +836,12 @@ func (a *App) onSaved(msg savedMsg) tea.Cmd {
 		a.save, a.saveErr = saveFailed, "storage unavailable"
 		return nil
 	}
+	a.sess.Player.Wings = msg.res.Wings
 	a.best = max(a.best, msg.res.Best)
 	if current {
 		a.save = saveOK
 		a.newRecord = msg.res.NewBest
+		a.wingsEarned = msg.res.WingsEarned
 		a.rank, a.ranked = msg.res.Rank, msg.res.Ranked
 	}
 	return a.loadTop()
@@ -795,7 +858,7 @@ func (a *App) SaveUnsaved(ctx context.Context, reason string) (saved bool, err e
 	switch {
 	case a.screen == screenPlay && a.world != nil && a.world.Phase() != game.Over && a.world.Score() > 0:
 		r = a.buildRun(reason)
-	case a.screen == screenPlay && a.world != nil && a.world.Phase() == game.Over && a.save == saveNone:
+	case a.screen == screenPlay && a.world != nil && a.world.Phase() == game.Over:
 		r = a.buildRun(crashReason(a.world.Crash()))
 	case a.lastRun.UUID != "" && (a.save == saveBusy || a.save == saveRetrying || a.save == saveFailed):
 		r = a.lastRun
@@ -1104,6 +1167,28 @@ func (a *App) key(msg tea.KeyPressMsg) tea.Cmd {
 
 func (a *App) keyPlay(k string) tea.Cmd {
 	w := a.world
+	if a.continueOffer {
+		switch k {
+		case "q", "esc":
+			a.markQuit()
+			return tea.Quit
+		case "w":
+			if !a.wingsBusy && !a.lay.tooSmall {
+				return a.spendWings()
+			}
+		case "space":
+			if !a.wingsBusy && !a.lay.tooSmall {
+				cmd := a.finishRun()
+				a.startRun()
+				return cmd
+			}
+		case "enter":
+			if !a.wingsBusy {
+				return a.finishRun()
+			}
+		}
+		return nil
+	}
 	switch k {
 	case "space", "up":
 		switch {

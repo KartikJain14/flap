@@ -53,6 +53,7 @@ type Player struct {
 	ColorMode string
 	GlyphMode string
 	SoundMode string
+	Wings     int
 }
 
 // End reasons for runs.
@@ -83,16 +84,19 @@ type Run struct {
 	Seed     uint64
 	Reason   string
 	EndedAt  time.Time
+	Pickups  []int // collected pipe indices, for idempotent recovery at final save
 }
 
 // RunResult describes the effect of recording a run.
 type RunResult struct {
-	PlayerID  int64
-	Best      int
-	NewBest   bool
-	Rank      int // 1-based leaderboard position of the player's best, 0 if unranked
-	Ranked    int // number of ranked players
-	Duplicate bool
+	PlayerID    int64
+	Best        int
+	NewBest     bool
+	Rank        int // 1-based leaderboard position of the player's best, 0 if unranked
+	Ranked      int // number of ranked players
+	Duplicate   bool
+	Wings       int
+	WingsEarned int
 }
 
 // Entry is one leaderboard row.
@@ -360,14 +364,14 @@ func fromMS(v sql.NullInt64) time.Time {
 	return time.UnixMilli(v.Int64)
 }
 
-const playerColumns = `id, kind, name, created_at, best_score, best_at, total_runs, color_mode, glyph_mode, sound_mode`
+const playerColumns = `id, kind, name, created_at, best_score, best_at, total_runs, color_mode, glyph_mode, sound_mode, wings`
 
 func scanPlayer(row interface{ Scan(...any) error }) (Player, error) {
 	var p Player
 	var kind string
 	var created int64
 	var bestAt sql.NullInt64
-	if err := row.Scan(&p.ID, &kind, &p.Name, &created, &p.Best, &bestAt, &p.Runs, &p.ColorMode, &p.GlyphMode, &p.SoundMode); err != nil {
+	if err := row.Scan(&p.ID, &kind, &p.Name, &created, &p.Best, &bestAt, &p.Runs, &p.ColorMode, &p.GlyphMode, &p.SoundMode, &p.Wings); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Player{}, ErrNotFound
 		}
@@ -410,7 +414,7 @@ func (s *Store) KeyPlayer(ctx context.Context, identity string, nameFor func(att
 				if err != nil {
 					return err
 				}
-				p = Player{ID: id, Kind: KindKey, Name: name, CreatedAt: time.UnixMilli(now)}
+				p = Player{ID: id, Kind: KindKey, Name: name, CreatedAt: time.UnixMilli(now), Wings: 3}
 				return nil
 			}
 		}
@@ -437,7 +441,7 @@ func (s *Store) CreateGuest(ctx context.Context, nameFor func(attempt int) strin
 				if err != nil {
 					return err
 				}
-				p = Player{ID: id, Kind: KindGuest, Name: name, CreatedAt: time.UnixMilli(now)}
+				p = Player{ID: id, Kind: KindGuest, Name: name, CreatedAt: time.UnixMilli(now), Wings: 3}
 				return nil
 			}
 		}
@@ -502,6 +506,11 @@ func (r Run) validate() error {
 	case r.EndedAt.IsZero():
 		return fmt.Errorf("%w: missing end time", ErrInvalidRun)
 	}
+	for i, pipe := range r.Pickups {
+		if pipe < 0 || pipe > r.Score || (i > 0 && pipe <= r.Pickups[i-1]) {
+			return ErrInvalidRun
+		}
+	}
 	return nil
 }
 
@@ -534,6 +543,11 @@ func (s *Store) RecordRun(ctx context.Context, playerID int64, r Run) (RunResult
 		if n == 0 {
 			res.Duplicate = true
 		} else {
+			var err error
+			res.WingsEarned, err = creditPickups(ctx, tx, playerID, r.UUID, r.Pickups)
+			if err != nil {
+				return err
+			}
 			res.NewBest = r.Score > best
 			if res.NewBest {
 				best, bestAt = r.Score, sql.NullInt64{Int64: ms(r.EndedAt), Valid: true}
@@ -547,6 +561,9 @@ func (s *Store) RecordRun(ctx context.Context, playerID int64, r Run) (RunResult
 				WHERE id = ?`, r.Score, ms(s.now()), best, bestAt, playerID); err != nil {
 				return err
 			}
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT wings FROM players WHERE id = ?`, playerID).Scan(&res.Wings); err != nil {
+			return err
 		}
 		res.Best = best
 		kind, err := playerKind(ctx, tx, playerID)

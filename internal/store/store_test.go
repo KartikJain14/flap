@@ -489,7 +489,7 @@ func TestMigratesVersionOneDatabase(t *testing.T) {
 		t.Fatalf("schema version %d, want %d", v, len(migrations))
 	}
 	got, err := s.Player(ctx, p.ID)
-	if err != nil || got.Best != 33 || got.SoundMode != "" {
+	if err != nil || got.Best != 33 || got.SoundMode != "" || got.Wings != 3 {
 		t.Fatalf("player after migration: %+v %v", got, err)
 	}
 	if err := s.SetPrefs(ctx, p.ID, Prefs{SoundMode: "on"}); err != nil {

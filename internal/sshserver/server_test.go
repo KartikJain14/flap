@@ -528,7 +528,8 @@ func TestStalledClientIsDisconnected(t *testing.T) {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
-		// Keep the game animating so there is output to send.
+		// Explicitly decline a continue and restart after crashes so there
+		// is output even when the no-input bird cannot keep flying.
 		tk := time.NewTicker(590 * time.Millisecond)
 		defer tk.Stop()
 		for {
@@ -536,7 +537,7 @@ func TestStalledClientIsDisconnected(t *testing.T) {
 			case <-stop:
 				return
 			case <-tk.C:
-				stdin.Write([]byte(" "))
+				stdin.Write([]byte("\r "))
 			}
 		}
 	}()
@@ -722,7 +723,9 @@ func TestBellReachesClient(t *testing.T) {
 	tm := ts.open(t, newKey(t), 80, 24)
 	tm.waitFor(5*time.Second, "PRESS")
 	tm.send(" ")
-	tm.waitFor(6*time.Second, "GAME OVER")
+	tm.waitFor(6*time.Second, "SPREAD YOUR WINGS")
+	tm.send("\r")
+	tm.waitFor(3*time.Second, "GAME OVER")
 	tm.mu.Lock()
 	raw := string(tm.raw)
 	tm.mu.Unlock()
@@ -733,4 +736,54 @@ func TestBellReachesClient(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	tm.send("q")
 	tm.waitEnd(5 * time.Second)
+}
+
+// Exercise purchasing through a real SSH channel and VT emulator, then
+// reconnect with the same key to verify that the debit persisted.
+func TestWingsContinueOverSSH(t *testing.T) {
+	ts := startServer(t, "", nil)
+	key := newKey(t)
+	tm := ts.open(t, key, 80, 24)
+	tm.waitFor(5*time.Second, "PRESS", "WINGS 3")
+	tm.send(" ")
+	tm.waitFor(6*time.Second, "SPREAD YOUR WINGS", "CONTINUE COST 1")
+	tm.send("w")
+	tm.waitFor(3*time.Second, "WINGS AWAKENED", "WINGS 2", "WINGS SHIELD")
+	tm.resize(100, 30)
+	tm.waitFor(3*time.Second, "RESIZED", "resume")
+	tm.send(" ")
+	tm.waitFor(10*time.Second, "SPREAD YOUR WINGS", "CONTINUE COST 2")
+	tm.send(" ") // finish the crashed flight and start fresh without spending wings
+	waitUntil(t, 3*time.Second, "fresh flight after SPACE", func() bool {
+		return !strings.Contains(tm.screen(), "SPREAD YOUR WINGS")
+	})
+	tm.send("q")
+	tm.waitEnd(5 * time.Second)
+	tm2 := ts.open(t, key, 80, 24)
+	tm2.waitFor(5*time.Second, "PRESS", "WINGS 2")
+	tm2.send("q")
+	tm2.waitEnd(5 * time.Second)
+	var runs int
+	if err := ts.st.DB().QueryRow(`SELECT COUNT(*) FROM runs`).Scan(&runs); err != nil || runs != 1 {
+		t.Fatalf("continued flight recorded %d times: %v", runs, err)
+	}
+}
+
+func TestContinueCountdownOverSSH(t *testing.T) {
+	ts := startServer(t, "", nil)
+	tm := ts.open(t, newKey(t), 80, 24)
+	tm.waitFor(5*time.Second, "PRESS")
+	tm.send(" ")
+	tm.waitFor(6*time.Second, "SPREAD YOUR WINGS", "CONTINUE? 5")
+	began := time.Now()
+	tm.waitFor(8*time.Second, "GAME OVER", "Score saved")
+	if elapsed := time.Since(began); elapsed < 4*time.Second || elapsed > 8*time.Second {
+		t.Fatalf("continue decision lasted %v", elapsed)
+	}
+	tm.send("q")
+	tm.waitEnd(5 * time.Second)
+	var wings, runs int
+	if err := ts.st.DB().QueryRow(`SELECT wings,total_runs FROM players`).Scan(&wings, &runs); err != nil || wings != 3 || runs != 1 {
+		t.Fatalf("timeout charged wings or lost run: %d %d %v", wings, runs, err)
+	}
 }

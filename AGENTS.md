@@ -20,15 +20,25 @@ The user's original brief: production-ready, visually polished, adaptive to
 terminal size, persistent high scores, secure to expose publicly, and fully
 tested and documented.
 
-## Status (2026-10-24)
+## Status (2026-11-14)
 
 **v1 is complete; every requirement in the brief is implemented**, plus
-sound effects and a continuous difficulty ramp added on request. All checks
-pass:
+sound effects, a continuous difficulty ramp, and wings/continues added on
+request. Wings start at 3 and are earned by touching golden pickups in every
+15th pipe's gap (15, 30, 45, etc.; `game.WingInterval = 15`). The icon is
+a mirrored pair of white angel wings with a golden halo/aura. Automatic score-based rewards have been removed. Collected
+wings credit immediately and buy same-flight revives at 1, 2, 4, 8... wings
+per run. The continue choice has an animated five-second timer; expiration
+saves and shows game over without spending wings. Revives have a
+countdown, gold burst/feather effects, and 3 simulated seconds of protection.
+Migration 3 also grants existing profiles 3 wings. W purchases; SPACE saves/restarts; ENTER saves/shows game over.
+
+Unit/integration, race, vet/staticcheck and build were rerun for wings.
+Deployment, vulnerability, manual OpenSSH and load results below are from v1:
 
 | Check | Command | Result |
 |---|---|---|
-| Unit + integration tests | `make test` | pass (104 test functions; real SSH sessions through a VT emulator) |
+| Unit + integration tests | `make test` | pass (133 test functions; real SSH sessions through a VT emulator) |
 | Race detector | `make race` | pass |
 | vet, staticcheck | `make vet lint` | clean |
 | govulncheck | `make vuln` | 0 reachable; only a module note on x/crypto/openpgp, which is not imported |
@@ -116,7 +126,8 @@ tmux -L flaptest kill-server
 - **Identity** is `HMAC(identity_secret, pubkey)`, set in
   `VerifiedPublicKeyCallback` (after proof of possession). The SSH user name
   is never trusted. Guests (keyboard-interactive, `open` mode only) get a
-  profile row only when they first save a run (`Session.Resolve`, memoised).
+  profile row only when they first collect a wing, save a run or buy a continue
+  (`Session.Resolve`, memoised).
 - **Never wait on the peer during session teardown.** x/crypto closes a
   channel's request stream only when the peer acknowledges or the connection
   dies, so the session closes the connection itself.
@@ -194,3 +205,78 @@ Measured on a Ryzen 5 5600X, static binary, 256 colours:
     (the unit otherwise cannot bind ports below 1024). This was verified in
     the Debian 12 and Ubuntu 24.04 systemd containers: exposure 1.5, real
     sessions on port 22. The installer changes were reverted.
+
+- 2026-11-14: Added persistent wings and same-flight continues at the user's
+  request. Migration 3 gives new/existing profiles 3 wings; atomic run saves
+  award 1 per 25 cumulative points with carried progress and no duplicate
+  rewards. Continue prices double per successful retry and reset on new runs.
+  Purchases are transactional, idempotent by run/retry, safe across concurrent
+  sessions, and checked against run ownership and completion.
+  - W explicitly buys a revive, ENTER finishes; frantic SPACE input cannot
+    spend wings. Guest profiles resolve lazily on purchase or save. Quitting
+    or disconnecting at the prompt still saves the flight once.
+  - Revival preserves the course and score, repositions the bird, and adds
+    a countdown, gold particle burst, animated wings/halo, and 3 simulated
+    seconds of invincibility. Pauses/resizes preserve protection. HUD/menu
+    show balances; game over shows rewards and progress.
+  - Verified: full unit/integration suite (including an SSH purchase, resize,
+    finish and reconnect), race detector, vet/staticcheck, static binary
+    build, and generated SVG screenshots (compact prompt and revival viewed).
+    No deployment, commit or push. Preserved the pre-existing credits edit.
+  - Updated the stalled-client test to explicitly decline continues before
+    restarting; its old SPACE-only input correctly stops at the new prompt.
+    The watchdog check passes in both normal and race builds.
+
+- 2026-11-14: Adjusted continue controls on request: SPACE saves the crashed
+  flight and immediately starts a new game; W alone spends wings to revive.
+  ENTER remains an alternative to finish at the game-over screen. Updated
+  prompt/help/README and tests, including disconnect during the pending save
+  and a real SSH restart/reconnect. Existing game palettes are unchanged;
+  wings add gold effects and the continue card dims its background. Local
+  play defaults to truecolor, whereas SSH can negotiate 256 colours.
+  - Verified the control update with the full test suite, full race suite,
+    vet/staticcheck and rebuilt binaries; opened the updated local game for
+    the user to test.
+
+- 2026-11-14: Replaced passive wing rewards on request with physical golden
+  pickups in the centre of pipe gaps 25, 50, 75, etc. Contact is required;
+  glowing feathers sparkle and collection produces a gold burst/banner.
+  Collected pipe indices survive revives and cannot be collected twice.
+  - Migration 4 adds player-bound pickup receipts. Async `CollectWings`
+    credits immediately; a sync before purchase and final-save reconciliation
+    recover failed writes without duplicate awards, including after spending.
+    Existing balances are preserved; no more cumulative score progress.
+  - Continue prompts now show a five-second countdown and shrinking bar.
+    W buys a revive, SPACE saves/restarts, ENTER finishes; timer expiration
+    saves once and shows game over. The timer pauses while purchasing,
+    while the terminal is too small, or during a server quit notice.
+  - Coverage includes collected/missed pickups, fixed 25-pipe spacing,
+    revive deduplication, concurrent crediting, failed-sync recovery, v3-to-v4
+    migration, countdown expiry/purchase waits, and actual SSH countdowns.
+    Generated pickup/countdown screenshots were visually inspected.
+  - Verified: full normal and race suites (132 test functions), vet,
+    staticcheck and static binary builds. Existing palettes remain unchanged.
+
+- 2026-11-14: Redesigned pickups as mirrored white angel wings with visible
+  feather tips, ivory shading, a gold halo, warm golden aura and sparkles.
+  Temporarily changed `game.WingInterval` from 25 to 5 on request so pickups
+  appear at 5, 10, 15, etc. The initial plan to restore 25 was superseded
+  by the permanent 15-pipe interval below.
+  - Migration 5 preserves existing pickup receipts and balances while removing
+    the fixed 25-pipe SQL constraint. Storage validates positions independently
+    of spawn frequency, so returning to 25 will not invalidate playtest wings.
+  - Increased the pickup contact radius to match the wider icon. Optimised
+    aura animation and pickup bursts to keep existing SSH bandwidth budgets.
+    Reviewed complete icons in 50x18 and 100x30 screenshots.
+  - Verified the update with normal/race suites, vet/staticcheck and builds.
+    The aura uses three warm colour bands; sparkles animate at six samples
+    per second and existing bandwidth budgets still pass at the test interval.
+  - Resumed after the interrupted final check: the completed aura passes
+    the full UI suite and wire budgets; vet/staticcheck and builds pass.
+    Opened the rebuilt game in a new terminal for playtesting at pipe 5.
+
+- 2026-11-14: Set the permanent wing interval to 15 at the user's request,
+  replacing the temporary 5-pipe test interval and the earlier 25-pipe plan.
+  Updated pickup spacing/contact tests, restored the exact speed-up bell
+  assertion (the first pickup is now after the first stage), and updated
+  current documentation. User authorized committing and pushing all changes.

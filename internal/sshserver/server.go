@@ -41,6 +41,8 @@ type Store interface {
 	KeyPlayer(ctx context.Context, identity string, nameFor func(int) string) (store.Player, error)
 	CreateGuest(ctx context.Context, nameFor func(int) string) (store.Player, error)
 	RecordRun(ctx context.Context, playerID int64, r store.Run) (store.RunResult, error)
+	SpendWings(ctx context.Context, playerID int64, runID string, retry int) (int, error)
+	CollectWings(ctx context.Context, playerID int64, runID string, pipes []int) (int, error)
 	Leaderboard(ctx context.Context, offset, limit int) (store.Page, error)
 	Rank(ctx context.Context, playerID int64) (int, int, error)
 	RecentRuns(ctx context.Context, playerID int64, limit int) ([]store.RunSummary, error)

@@ -313,6 +313,9 @@ func playUntilOver(h *harness, autopilotFrames int) {
 	h.autopilot(autopilotFrames)
 	for i := 0; i < 30*30 && h.app.screen == screenPlay; i++ {
 		h.frames(1, 30)
+		if h.app.continueOffer {
+			h.key("enter")
+		}
 	}
 }
 

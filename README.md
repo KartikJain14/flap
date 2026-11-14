@@ -39,6 +39,18 @@ and cannot be submitted by clients.
   time-of-day stages (Morning, Midday, Golden Hour, Nightfall, Aurora,
   Daybreak) change the sky at 10, 25, 50, 100 and 150 points, and a banner
   announces each speed-up.
+- **Wings and second chances.** New profiles start with 3 wings; existing
+  profiles receive 3 when upgraded. A pair of white angel wings with a
+  golden glow and halo appears in every 15th pipe gap (15, 30, 45…).
+  Touch it to collect a wing; passing the pipe alone earns nothing. The wings sparkle,
+  burst into gold particles and credit your balance immediately for this flight's
+  next revive. After a crash you have **5 seconds** to press **W** to revive
+  or **Space** to save and start fresh. Letting the timer expire saves the
+  run and shows game over. Continues cost 1, 2, 4, 8… wings within a run,
+  resetting to 1 for each new flight. Revival has a gold feather burst,
+  a countdown and 3 seconds of invincibility with a pulsing halo. Keep
+  flapping! Pauses and resizes preserve protection. Wings persist with your
+  SSH key; guests keep them only for their session.
 - **Sound effects through the terminal bell.** It rings when the game speeds
   up, when you beat your personal best mid-run, and when you crash. Toggle it
   with <kbd>S</kbd>; the setting is remembered. The bell is the only sound a
@@ -74,6 +86,9 @@ and cannot be submitted by clients.
 | Key | Action |
 |---|---|
 | <kbd>Space</kbd> (or <kbd>↑</kbd>) | Start, flap, resume, retry |
+| <kbd>W</kbd> | Spend wings to continue after a crash |
+| <kbd>Space</kbd> at the continue prompt | Save the crashed flight and start a new game |
+| <kbd>Enter</kbd> at the continue prompt | Save and show game over |
 | <kbd>P</kbd> | Pause / resume |
 | <kbd>L</kbd> | Leaderboard (<kbd>←</kbd>/<kbd>→</kbd> to page) |
 | <kbd>N</kbd> | Change your name (players with an SSH key) |
@@ -83,8 +98,10 @@ and cannot be submitted by clients.
 | <kbd>H</kbd> or <kbd>?</kbd> | Help |
 | <kbd>Q</kbd>, <kbd>Esc</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> | Quit (on the leaderboard and help screens <kbd>Esc</kbd> goes back) |
 
-No key needs <kbd>Enter</kbd>. After a crash <kbd>Space</kbd> is ignored for
-0.6 s, so frantic flapping does not instantly restart.
+The continue prompt uses **W** to spend wings and **Space** to save the
+crashed flight and immediately start fresh. **Enter** saves and shows game
+over instead. **Space** never purchases a continue. After game over, **Space**
+is ignored for 0.6 s, so frantic flapping does not instantly restart.
 
 ## Playing
 

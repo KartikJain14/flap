@@ -13,7 +13,7 @@ import (
 )
 
 // credit names the game's developer on the welcome and help screens.
-const credit = "made by Kartik Jain"
+const credit = "made by Kartik Jain - jkartik.in"
 
 // glyphSet holds the symbols used by the UI in each glyph mode.
 type glyphSet struct {
@@ -55,6 +55,9 @@ func (a *App) render() {
 			a.drawWelcome()
 		case screenPlay:
 			a.drawHUD()
+			if a.continueOffer {
+				a.drawContinue()
+			}
 			if a.paused && a.overlay == overlayNone {
 				a.drawPause()
 			}
@@ -115,6 +118,9 @@ func (a *App) drawScene() {
 		wl = a.welcomeLayout()
 	}
 	sc.drawGround(l, th, scroll)
+	if a.worldVisible() {
+		a.drawWingPickups()
+	}
 
 	if a.worldVisible() {
 		w := a.world
@@ -131,6 +137,10 @@ func (a *App) drawScene() {
 		tintAmt := 0.0
 		if w.Phase() != game.Playing && int(a.t*10)%2 == 0 && a.t-a.overAt < 0.6 {
 			tintAmt = 0.45
+		}
+		if w.Invincible() > 0 {
+			a.drawShield()
+			tintAmt = 0.3 + 0.25*math.Sin(a.t*12)
 		}
 		sc.drawBird(l, a.opt.Params, b.Y, wing, a.birdAngle, a.skinIndex(), hex(0xffffff), tintAmt)
 	} else if a.screen == screenWelcome {
@@ -208,6 +218,7 @@ func (a *App) drawHUD() {
 	x := right - canvas.StringWidth(label+val)
 	a.cv.Text(x, row, label, colText.Scale(0.85), 0)
 	a.cv.Text(x+len(label), row, val, colAccent, canvas.Bold)
+	a.cv.TextRight(right, row+1, fmt.Sprintf("WINGS %d", a.sess.Player.Wings), colGold, 0)
 	if a.world != nil {
 		th := themeFor(a.world.Stage())
 		n := a.cv.Text(l.playX+1, row, strings.ToUpper(th.name), colText.Scale(0.8), 0)
@@ -223,7 +234,11 @@ func (a *App) drawHUD() {
 		a.cv.TextCentered(l.playX, y, l.playW, title, colText.Lerp(colAccent, fade), canvas.Bold)
 		a.cv.TextCentered(l.playX, y+1, l.playW, a.bannerSub, colText.Scale(0.5+0.4*fade), 0)
 	}
-	if a.screen == screenPlay && a.runs == 0 && a.world.Duration() < 4 && a.world.Phase() == game.Playing {
+	if a.world.Invincible() > 0 && a.screen == screenPlay {
+		text := fmt.Sprintf("WINGS SHIELD %.1fs - keep flapping!", a.world.Invincible())
+		a.cv.TextCentered(l.playX, l.skyRows-2, l.playW, a.trunc(text, l.playW-2), colGold, canvas.Bold)
+	}
+	if a.world.Invincible() == 0 && a.screen == screenPlay && a.runs == 0 && a.world.Duration() < 4 && a.world.Phase() == game.Playing {
 		hint := "SPACE flap " + a.g.sep + " P pause " + a.g.sep + " Q quit"
 		a.cv.TextCentered(l.playX, l.skyRows-2, l.playW, a.trunc(hint, l.playW-2), colText, canvas.Bold)
 	}
@@ -408,7 +423,7 @@ func (a *App) drawWelcome() {
 	if name == "" {
 		name = "guest"
 	}
-	right := "BEST " + strconv.Itoa(a.Best())
+	right := fmt.Sprintf("BEST %d  WINGS %d", a.Best(), a.sess.Player.Wings)
 	if a.rank > 0 && in.W >= 44 {
 		right += fmt.Sprintf("  #%d of %d", a.rank, a.ranked)
 	}
@@ -645,7 +660,10 @@ func (a *App) drawGameOver() {
 	case saveRetrying:
 		status, col = a.g.warn+" Storage busy, retrying"+a.g.ell, colWarn
 	case saveOK:
-		status, col = a.g.check+" Score saved", colGood
+		status, col = fmt.Sprintf("%s Score saved | WINGS %d", a.g.check, a.sess.Player.Wings), colGood
+		if a.wingsEarned > 0 {
+			status = fmt.Sprintf("Score saved | +%d wings! Balance %d", a.wingsEarned, a.sess.Player.Wings)
+		}
 	case saveFailed:
 		status, col = a.g.cross+" Not saved: "+a.saveErr, colBad
 	case saveSkipped:
@@ -746,6 +764,7 @@ func (a *App) drawHelp() {
 		{"", "CONTROLS", true},
 		{"SPACE", "flap / start / retry", false},
 		{"P", "pause or resume", false},
+		{"W", "revive after a crash; SPACE starts fresh", false},
 		{"L", "leaderboard", false},
 		{"N", "change your name (SSH key players)", false},
 		{"C", "colors: " + a.color.String() + " (truecolor, 256, 16)", false},

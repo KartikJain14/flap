@@ -27,12 +27,13 @@ type fakeStore struct {
 	prefs    store.Prefs
 	nextID   int64
 	recorded map[string]bool
+	pickups  map[string]map[int]bool
 }
 
 var errFake = errors.New("fake storage failure")
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{players: map[int64]*store.Player{}, recorded: map[string]bool{}, nextID: 1}
+	return &fakeStore{players: map[int64]*store.Player{}, recorded: map[string]bool{}, nextID: 1, pickups: map[string]map[int]bool{}}
 }
 
 func (f *fakeStore) failing() bool {
@@ -72,14 +73,63 @@ func (f *fakeStore) RecordRun(_ context.Context, id int64, r store.Run) (store.R
 		f.recorded[r.UUID] = true
 		f.runs = append(f.runs, r)
 		p.Runs++
+		res.WingsEarned = f.creditPickups(id, r.UUID, r.Pickups)
 		if r.Score > p.Best {
 			p.Best = r.Score
 			res.NewBest = true
 		}
 	}
+	res.Wings = p.Wings
 	res.Best = p.Best
 	res.Rank, res.Ranked = f.rankLocked(id)
 	return res, nil
+}
+
+func (f *fakeStore) SpendWings(_ context.Context, id int64, runID string, retry int) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failing() {
+		return 0, errFake
+	}
+	p := f.players[id]
+	if p == nil {
+		return 0, store.ErrNotFound
+	}
+	cost := store.ContinueCost(retry)
+	if p.Wings < cost {
+		return p.Wings, store.ErrNoWings
+	}
+	p.Wings -= cost
+	return p.Wings, nil
+}
+
+func (f *fakeStore) creditPickups(id int64, runID string, pipes []int) int {
+	if f.pickups[runID] == nil {
+		f.pickups[runID] = map[int]bool{}
+	}
+	earned := 0
+	for _, p := range pipes {
+		if !f.pickups[runID][p] {
+			f.pickups[runID][p] = true
+			earned++
+		}
+	}
+	f.players[id].Wings += earned
+	return earned
+}
+
+func (f *fakeStore) CollectWings(_ context.Context, id int64, runID string, pipes []int) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failing() {
+		return 0, errFake
+	}
+	p := f.players[id]
+	if p == nil {
+		return 0, store.ErrNotFound
+	}
+	f.creditPickups(id, runID, pipes)
+	return p.Wings, nil
 }
 
 func (f *fakeStore) sorted() []*store.Player {

@@ -57,6 +57,7 @@ const (
 	EventStage
 	EventCrash
 	EventLanded
+	EventWing
 )
 
 // Event is emitted by the simulation so the presentation layer can react
@@ -65,6 +66,7 @@ type Event struct {
 	Kind  EventKind
 	Score int
 	Stage int
+	Pipe  int // index of a collected wing
 }
 
 // Bird is the player-controlled entity.
@@ -79,12 +81,23 @@ type Bird struct {
 
 // Pipe is one pipe pair. X is its left edge in absolute world coordinates.
 type Pipe struct {
-	Index  int
-	X      float64
-	GapY   float64
-	Gap    float64
-	Scored bool
+	Index         int
+	X             float64
+	GapY          float64
+	Gap           float64
+	Scored        bool
+	WingCollected bool
 }
+
+// WingInterval is the number of pipe pairs between collectible wings.
+// Persistence accepts historical pickup positions independently of this setting.
+const WingInterval = 15
+
+// HasWing marks an uncollected pickup at the configured interval.
+func (p Pipe) HasWing() bool { return (p.Index+1)%WingInterval == 0 && !p.WingCollected }
+
+// WingRadius is the physical radius of the collectible; its glow is cosmetic.
+const WingRadius = 0.08
 
 // GapTop returns the y coordinate of the top edge of the opening.
 func (p Pipe) GapTop() float64 { return p.GapY - p.Gap/2 }
@@ -110,11 +123,13 @@ type World struct {
 	nextX     float64
 	lastGapY  float64
 
-	score      int
-	stage      int
-	ticks      int
-	flaps      int
-	dyingTicks int
+	score       int
+	stage       int
+	ticks       int
+	flaps       int
+	dyingTicks  int
+	shieldTicks int
+	collected   []int
 
 	events []Event
 }
@@ -166,6 +181,9 @@ func (w *World) BirdWorldX() float64 { return w.camera + w.params.BirdX }
 // Score returns the number of pipe pairs passed.
 func (w *World) Score() int { return w.score }
 
+// CollectedWings returns a snapshot of collected pipe indices, across revives.
+func (w *World) CollectedWings() []int { return append([]int(nil), w.collected...) }
+
 // Stage returns the index of the active difficulty stage.
 func (w *World) Stage() int { return w.stage }
 
@@ -211,6 +229,27 @@ func (w *World) Flap() bool {
 	return true
 }
 
+// Invincible returns the remaining protection in simulated seconds.
+func (w *World) Invincible() float64 { return float64(w.shieldTicks) * w.dt }
+
+// Revive resumes the same course and score from a safe height. Protection is
+// measured in simulation ticks so pauses and resizes never consume it.
+func (w *World) Revive() bool {
+	if w.phase != Over {
+		return false
+	}
+	w.phase, w.crash, w.dyingTicks = Playing, CrashNone, 0
+	w.bird = Bird{Y: 0.45}
+	for _, p := range w.pipes {
+		if p.X+w.params.PipeWidth >= w.BirdWorldX()-w.params.BirdWidth/2 {
+			w.bird.Y = p.GapY
+			break
+		}
+	}
+	w.shieldTicks = int(math.Ceil(3 / w.dt))
+	return true
+}
+
 // Step advances the simulation by one fixed tick.
 func (w *World) Step() {
 	switch w.phase {
@@ -221,7 +260,12 @@ func (w *World) Step() {
 		w.spawnPipes()
 		w.despawnPipes()
 		w.updateScore()
-		if c := w.collision(); c != CrashNone {
+		if w.shieldTicks > 0 {
+			w.shieldTicks--
+			if ground := 1 - w.params.BirdHeight/2; w.bird.Y >= ground {
+				w.bird.Y, w.bird.VY = ground-w.params.BirdHeight/4, -w.params.FlapVelocity
+			}
+		} else if c := w.collision(); c != CrashNone {
 			w.crash = c
 			w.phase = Dying
 			if c == CrashGround {
@@ -229,6 +273,9 @@ func (w *World) Step() {
 				return
 			}
 			w.emit(Event{Kind: EventCrash, Score: w.score})
+		}
+		if w.phase == Playing {
+			w.collectWings()
 		}
 	case Dying:
 		w.dyingTicks++
@@ -323,6 +370,22 @@ func (w *World) updateScore() {
 		if s := w.stageFor(w.score); s != w.stage {
 			w.stage = s
 			w.emit(Event{Kind: EventStage, Score: w.score, Stage: s})
+		}
+	}
+}
+
+func (w *World) collectWings() {
+	for i := range w.pipes {
+		p := &w.pipes[i]
+		if !p.HasWing() {
+			continue
+		}
+		dx := (w.BirdWorldX() - (p.X + w.params.PipeWidth/2)) / (w.params.BirdWidth/2 + WingRadius)
+		dy := (w.bird.Y - p.GapY) / (w.params.BirdHeight/2 + WingRadius)
+		if dx*dx+dy*dy <= 1 {
+			p.WingCollected = true
+			w.collected = append(w.collected, p.Index)
+			w.emit(Event{Kind: EventWing, Pipe: p.Index, Score: w.score})
 		}
 	}
 }

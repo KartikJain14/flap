@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"flap/internal/canvas"
+	"flap/internal/game"
 )
 
 var shotsDir = flag.String("shots", "", "write SVG screenshots of every screen to this directory")
@@ -54,6 +55,33 @@ func TestShots(t *testing.T) {
 
 		h.key("l")
 		save(h, "board-"+tag, canvas.TrueColor)
+		wh := wingHarness(t, w, hh)
+		crashForWings(wh)
+		save(wh, "continue-"+tag, canvas.Color256)
+		wh.key("w")
+		wh.frames(30, 30)
+		save(wh, "revive-"+tag, canvas.Color256)
+		ph := wingHarness(t, w, hh)
+		ph.key("space")
+		for i := 0; i < 30*100; i++ {
+			found := false
+			for _, p := range ph.app.world.Pipes() {
+				x := p.X + ph.param.PipeWidth/2 - ph.app.world.Camera()
+				if p.HasWing() && x > ph.param.BirdX+0.25 && x < ph.app.lay.viewW-0.45 {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+			ph.autopilot(1)
+			if ph.app.world.Phase() != game.Playing {
+				t.Fatal("pilot crashed before pickup preview")
+			}
+		}
+		save(ph, "pickup-"+tag, canvas.Color256)
+
 	}
 
 	// Later stages: actually play there so the HUD, theme and difficulty

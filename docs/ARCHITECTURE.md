@@ -284,3 +284,55 @@ runs(id, run_uuid UNIQUE, player_id → players ON DELETE CASCADE, score,
 | Every screen at 16 sizes × 2 glyph modes (exact frame size, no control characters), resize/too-small/recovery, quit keys, saving/retry/recovery, guest profiles, name editing, hostile stored names, ASCII-only output, colour modes, pause, notices, lag clamping, bandwidth budget | `internal/tui` |
 | Real SSH sessions through a terminal emulator: play, resize, exit and terminal restoration, guests, allowlist and bans, refusal of exec/sftp/forwarding/x11/agent/extra channels, no-PTY, session limits, handshake and rate limits, restart persistence, concurrent isolation and goroutine cleanup, abrupt disconnect saving, graceful shutdown, idle timeout, stalled clients, malformed requests, host key and secret persistence, identity keying, weak keys | `internal/sshserver` |
 | Install/upgrade/rollback/uninstall/purge under systemd | `deploy/test/systemd-test.sh` |
+
+## Wings and continues
+
+Migration 3 adds `players.wings` (default 3, including existing players) and
+an idempotent purchase ledger keyed by `(run_uuid, retry)`. `SpendWings`
+uses an IMMEDIATE transaction to check the balance, enforce sequential
+retries and run ownership, debit `1 << retry`, and insert the receipt.
+Duplicate requests return the current balance without another debit.
+Purchases are rejected for finished runs; retry indices are capped at 30 to
+avoid integer overflow. Receipts survive disconnects and are deleted with
+the player. They are retained independently of run-history retention.
+
+`game.WingInterval` is 15. Every pipe whose 1-based index is divisible by
+that interval has a physical wing
+at the centre of its gap. `World`
+checks bird contact against the pickup radius,
+emits `EventWing`, and retains the collected indices across revives. The
+renderer draws two mirrored white feathered angel wings, a halo, a golden
+glow and sparkles without moving the physical pickup. Sparkles animate at
+six samples per second; the aura uses three colour bands, and pickup bursts
+stay within wire budgets.
+Missing a pickup earns nothing; there are no score-based rewards.
+
+Migration 4 adds `wing_pickups`, an idempotent ledger keyed by run UUID and
+pipe index, bound to the player. `CollectWings` credits pickups asynchronously
+while playing, so they can fund the same flight's next revive. `SpendWings`
+is preceded by a pickup sync. Final saves carry a snapshot of collected
+indices in `Run.Pickups`; `RecordRun` reconciles any failed pickup writes in
+its existing transaction without awarding previously credited or spent
+pickups again. Migration 5 removes the fixed 25-pipe constraint from pickup
+receipts and
+preserves all existing receipts and balances. Pickup scheduling belongs to
+the simulation; storage validates nonnegative, ordered indices, and final
+saves also bound them by the run's score. This preserves historical pickup positions
+when the spawn interval changes. Both ledgers
+cascade on player deletion and outlive run-history retention.
+
+The UI waits up to five seconds at a continue prompt before saving the run.
+An animated bar and remaining seconds show the decision window; expiration
+saves once and shows game over without spending wings. The decision timer
+pauses for an undersized terminal, a purchase in flight, or a quit notice.
+A purchase runs as a command with the normal storage timeout; gameplay resumes only on success.
+A failed response can be retried safely with the same purchase identifier.
+Guests resolve their profile lazily on the first pickup, purchase or save. SPACE saves
+the crashed flight asynchronously and immediately starts a fresh world; W
+alone purchases a revive. ENTER saves and shows game over. Pending saves
+survive an immediate disconnect after a restart. Declining,
+quitting or disconnecting saves the final score once. The simulation's
+`Revive` preserves the seed, camera, course, score and playing ticks, resets
+the bird into the next pipe's gap, and grants three seconds of protection
+in simulation ticks. Protected ground contact bounces the bird; pipe
+collisions are ignored. Countdown, pause and resize do not consume protection.
